@@ -5,6 +5,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:note_synapse/services/service_locator.dart';
 import 'package:note_synapse/services/database_service.dart';
 import 'package:note_synapse/services/note_modification_service.dart';
+import 'package:note_synapse/services/plugin_facing_exception.dart';
 import 'package:note_synapse/services/tag_workflow_service.dart';
 import 'package:note_synapse/models/note.dart';
 
@@ -359,6 +360,35 @@ void main() {
         expect(result.content, contains('| Done   | 小猪皮皮的游乐园之梦'));
       });
 
+      test('not-found, multiple-match and unknown-section failures are '
+          'plugin-facing', () async {
+        final failures = <Map<String, dynamic>>[
+          {'old_text': '- [ ] Book C', 'new_text': '- [x] Book C'},
+          {'old_text': '- [ ] Book A', 'new_text': '- [x] Book A'},
+          {
+            'old_text': '- [ ] Book A',
+            'new_text': '- [x] Book A',
+            'section': '## Missing',
+          },
+        ];
+        final messages = <String>[];
+        for (var i = 0; i < failures.length; i++) {
+          final content = failures[i];
+          try {
+            await apply({
+              'action': 'replace_text',
+              ...content,
+            }, note: recordNote().copyWith(id: 'record-fail-$i'));
+            fail('expected an exception for $content');
+          } on PluginFacingException catch (e) {
+            messages.add(e.message);
+          }
+        }
+        expect(messages[0], startsWith('replace_text: "old_text" was not found'));
+        expect(messages[1], startsWith('replace_text: "old_text" matched 2'));
+        expect(messages[2], 'Section not found: ## Missing');
+      });
+
       test('missing old_text is rejected with the expected shape', () async {
         try {
           await apply({'action': 'replace_text', 'new_text': 'x'});
@@ -366,6 +396,136 @@ void main() {
         } catch (e) {
           expect('$e', contains('old_text'));
           expect('$e', contains('replace_text'));
+        }
+      });
+    });
+
+    group('subnote.updated', () {
+      final created = DateTime.fromMillisecondsSinceEpoch(1700000000000);
+      Note checklist() => Note(
+        id: 'list-1',
+        title: 'Checklist',
+        content: '',
+        type: NoteType.note,
+        createdAt: created,
+        updatedAt: created,
+        subNotes: [
+          SubNote(id: 's1', name: 'One', content: 'a', createdAt: created),
+          SubNote(id: 's2', name: 'Two', content: 'b', createdAt: created),
+          SubNote(id: 's3', name: 'Three', content: 'c', createdAt: created),
+        ],
+      );
+
+      Future<Note> apply(Map<String, dynamic> subnote) async {
+        final note = checklist();
+        if (rawDb == null) {
+          rawDb = await openRawNotesDb();
+          await seedRawNote(note);
+        }
+        when(mockDb.getNoteById(note.id)).thenAnswer((_) async => note);
+        when(mockDb.database).thenAnswer((_) async => rawDb!);
+        return service.applyModifications(note.id, {'subnote': subnote});
+      }
+
+      test('updates fields in place and keeps every id', () async {
+        final result = await apply({
+          'updated': [
+            {'id': 's2', 'isCompleted': true},
+            {'id': 's3', 'name': 'Three!', 'content': 'c2'},
+          ],
+        });
+        expect(result.subNotes.map((s) => s.id), ['s1', 's2', 's3']);
+        expect(result.subNotes[1].isCompleted, isTrue);
+        expect(result.subNotes[1].name, 'Two');
+        expect(result.subNotes[2].name, 'Three!');
+        expect(result.subNotes[2].content, 'c2');
+        expect(result.subNotes[2].isCompleted, isFalse);
+        expect(result.subNotes[0].createdAt, created);
+
+        final rows = await rawDb!.query(
+          'subnotes',
+          where: 'noteId = ?',
+          whereArgs: ['list-1'],
+          orderBy: 'id',
+        );
+        expect(rows.map((r) => r['id']), ['s1', 's2', 's3']);
+        expect(rows.map((r) => r['isCompleted']), [0, 1, 0]);
+      });
+
+      test('combines with removed and added', () async {
+        final result = await apply({
+          'removed': ['s1'],
+          'updated': [
+            {'id': 's2', 'isCompleted': true},
+          ],
+          'added': [
+            {'name': 'Four'},
+          ],
+        });
+        expect(result.subNotes.map((s) => s.name), ['Two', 'Three', 'Four']);
+        expect(result.subNotes.first.id, 's2');
+        expect(result.subNotes.first.isCompleted, isTrue);
+      });
+
+      test('an id in both removed and updated is removed, not an error',
+          () async {
+        final result = await apply({
+          'removed': ['s1'],
+          'updated': [
+            {'id': 's1', 'isCompleted': true},
+            {'id': 's2', 'isCompleted': true},
+          ],
+        });
+        expect(result.subNotes.map((s) => s.id), ['s2', 's3']);
+        expect(result.subNotes.first.isCompleted, isTrue);
+      });
+
+      test('an empty or blank name leaves the name unchanged', () async {
+        final result = await apply({
+          'updated': [
+            {'id': 's1', 'name': ''},
+            {'id': 's2', 'name': '   '},
+          ],
+        });
+        expect(result.subNotes.map((s) => s.name), ['One', 'Two', 'Three']);
+      });
+
+      test('an unknown id refuses the modification with a plugin-facing '
+          'error', () async {
+        await expectLater(
+          apply({
+            'updated': [
+              {'id': 's2', 'isCompleted': true},
+              {'id': 'gone', 'isCompleted': true},
+            ],
+          }),
+          throwsA(
+            isA<PluginFacingException>().having(
+              (e) => e.message,
+              'message',
+              contains('Subnote gone not found in note list-1'),
+            ),
+          ),
+        );
+        final rows = await rawDb!.query('subnotes');
+        expect(rows, isEmpty, reason: 'nothing was persisted');
+      });
+
+      test('rejects malformed entries', () async {
+        for (final bad in <dynamic>[
+          'not-a-list',
+          [
+            {'isCompleted': true},
+          ],
+          [
+            {'id': 's1', 'isCompleted': 'yes'},
+          ],
+        ]) {
+          await expectLater(
+            apply({'updated': bad}),
+            throwsA(isA<PluginFacingException>()),
+            reason: '$bad',
+          );
         }
       });
     });

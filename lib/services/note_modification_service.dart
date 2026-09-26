@@ -9,6 +9,7 @@ import '../utils/file_utils.dart';
 import '../utils/file_type_utils.dart';
 import '../utils/synapse_temp_utils.dart';
 import 'logger_service.dart';
+import 'plugin_facing_exception.dart';
 import 'service_locator.dart';
 import 'space_scope_service.dart';
 import 'tag_workflow_service.dart';
@@ -476,6 +477,12 @@ class NoteModificationService {
       final removedIds = (subMod['removed'] as List?)?.cast<String>() ?? [];
       final currentSubnotes = List<SubNote>.from(updatedNote.subNotes);
       currentSubnotes.removeWhere((s) => removedIds.contains(s.id));
+      _applySubnoteUpdates(
+        currentSubnotes,
+        subMod['updated'],
+        note.id,
+        removedIds: removedIds.toSet(),
+      );
 
       for (final s in addedSubnotes) {
         if (s is Map<String, dynamic>) {
@@ -495,6 +502,61 @@ class NoteModificationService {
     }
 
     return updatedNote.copyWith(updatedAt: DateTime.now());
+  }
+
+  /// Applies `subnote.updated: [{id, isCompleted?, name?, content?}]` in
+  /// place, keeping each subnote's id, position and createdAt. Unlike a full
+  /// `subNotes` list, which recreates every row with fresh ids, this lets a
+  /// caller tick one item without disturbing the rest. Runs after `removed`
+  /// and before `added`; an entry whose id is also in `removed` is skipped
+  /// (removal wins). An empty or blank `name` leaves the name unchanged.
+  /// Errors are [PluginFacingException]s: the whole modification is refused,
+  /// and a plugin can tell an unknown id from a refusal.
+  void _applySubnoteUpdates(
+    List<SubNote> subnotes,
+    dynamic updates,
+    String noteId, {
+    Set<String> removedIds = const {},
+  }) {
+    if (updates == null) return;
+    if (updates is! List) {
+      throw PluginFacingException(
+        'subnote.updated must be a list of {id, isCompleted?, name?, '
+        'content?} objects.',
+      );
+    }
+    for (final entry in updates) {
+      final id = entry is Map ? entry['id'] : null;
+      if (id is! String || id.isEmpty) {
+        throw PluginFacingException(
+          'Each subnote.updated entry needs a non-empty string "id".',
+        );
+      }
+      final isCompleted = (entry as Map)['isCompleted'];
+      final name = entry['name'];
+      final content = entry['content'];
+      if ((isCompleted != null && isCompleted is! bool) ||
+          (name != null && name is! String) ||
+          (content != null && content is! String)) {
+        throw PluginFacingException(
+          'subnote.updated entry $id: isCompleted must be a boolean, name and '
+          'content must be strings.',
+        );
+      }
+      if (removedIds.contains(id)) continue;
+      final index = subnotes.indexWhere((s) => s.id == id);
+      if (index == -1) {
+        throw PluginFacingException(
+          'Subnote $id not found in note $noteId; no changes were made.',
+        );
+      }
+      final trimmedName = (name as String?)?.trim();
+      subnotes[index] = subnotes[index].copyWith(
+        isCompleted: isCompleted as bool?,
+        name: trimmedName == null || trimmedName.isEmpty ? null : trimmedName,
+        content: content as String?,
+      );
+    }
   }
 
   String _applyContentModification(
@@ -552,6 +614,8 @@ class NoteModificationService {
   /// - Already applied (`old_text` absent, `new_text` present exactly once):
   ///   idempotent success, so a retry after a timeout cannot double-apply.
   /// - Matching is exact — no fuzzy or partial-word mutation.
+  /// - The not-found, multiple-match and section-not-found errors are
+  ///   [PluginFacingException]s, so plugins receive them verbatim.
   String _applyReplaceTextModification(
     String content, {
     required dynamic oldText,
@@ -590,14 +654,14 @@ class NoteModificationService {
           _sharedAffixLength(oldText, newText) * 2 >= newText.length) {
         return content;
       }
-      throw Exception(
+      throw PluginFacingException(
         'replace_text: "old_text" was not found in $scopeLabel; no changes '
         'were made. Read the note and copy the text to replace exactly. If '
         'you already applied this edit, no further action is needed.',
       );
     }
     if (matches > 1) {
-      throw Exception(
+      throw PluginFacingException(
         'replace_text: "old_text" matched $matches places in $scopeLabel; no '
         'changes were made. Provide a longer, unique old_text or add '
         '"section" to disambiguate.',
@@ -661,7 +725,7 @@ class NoteModificationService {
     final lines = content.split('\n');
     final headingIndex = lines.indexWhere((line) => line.trim() == section);
     if (headingIndex == -1) {
-      throw Exception('Section not found: $section');
+      throw PluginFacingException('Section not found: $section');
     }
 
     final headingLevel = _headingLevel(section);

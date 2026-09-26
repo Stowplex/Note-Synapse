@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gantt smoke</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0; padding: 16px;
+         background: #0e1013; color: #e8eaf0; }
+  .row { padding: 3px 0; border-bottom: 1px solid #262b36; }
+  .pass::before { content: 'PASS '; color: #34d399; }
+  .fail::before { content: 'FAIL '; color: #f87171; }
+  .fail { color: #f87171; }
+  pre { color: #8b93a5; white-space: pre-wrap; margin: 4px 0 8px 40px; }
+  #sum { padding: 12px 0; font-size: 15px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div id="sum">running…</div>
+<div id="out"></div>
+
+<script src="../plugins/src/i18n.js"></script>
+<script src="../plugins/src/dates.js"></script>
+<script src="../plugins/src/model.js"></script>
+<script src="../plugins/src/undo.js"></script>
+<script src="../plugins/src/block.js"></script>
+<script src="../plugins/src/md.js"></script>
+<script src="../plugins/src/host.js"></script>
+<script src="../plugins/src/store.js"></script>
+<script src="../plugins/src/scale.js"></script>
+<script src="../plugins/src/layout.js"></script>
+<script src="../plugins/src/theme.js"></script>
+<script src="../plugins/src/render.js"></script>
+<script src="../plugins/src/gestures.js"></script>
+<script src="../plugins/src/sheet.js"></script>
+<script src="../plugins/src/app.js"></script>
+<script>
+/*
+ * Runs dev/spec.js, dev/host_spec.js, dev/store_spec.js, dev/dom_spec.js, dev/view_spec.js and dev/gesture_spec.js in a real browser.
+ * Fixtures come from the dev server's directory listing, so a new fixture
+ * needs no edit here. Serve contrib/gantt and run node dev/chrome.js.
+ */
+window.GT_FIXTURES = {};
+function load(src) {
+  return new Promise(function (resolve, reject) {
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = function () { reject(new Error('could not load ' + src)); };
+    document.body.appendChild(s);
+  });
+}
+fetch('fixtures/').then(function (r) { return r.text(); }).then(function (html) {
+  var names = [], re = /href="([^"?\/]+\.(?:md|json))"/g, m;
+  while ((m = re.exec(html))) names.push(decodeURIComponent(m[1]));
+  return Promise.all(names.map(function (f) {
+    return fetch('fixtures/' + encodeURIComponent(f)).then(function (r) { return r.text(); }).then(function (t) {
+      window.GT_FIXTURES[f] = t.split('{{APP_UUID}}').join(GT.APP_UUID);
+    });
+  }));
+}).then(function () { return load('spec.js'); })
+  .then(function () { return load('host_spec.js'); })
+  .then(function () { return load('store_spec.js'); })
+  .then(function () { return load('dom_spec.js'); })
+  .then(function () { return load('view_spec.js'); })
+  .then(function () { return load('gesture_spec.js'); })
+  .then(function () { return load('edit_spec.js'); })
+  .then(function () { return load('style_spec.js'); })
+  .then(function () { return load('m9_spec.js'); })
+  .then(go)
+  .catch(function (e) { document.getElementById('sum').textContent = 'setup failed: ' + e.message; });
+
+function go() {
+  GT.spec.run().then(function (res) {
+    var out = document.getElementById('out');
+    var fails = 0;
+    var nFix = Object.keys(window.GT_FIXTURES).length;
+    res.push({ name: 'the page loaded the fixtures (' + nFix + ')', pass: nFix >= 46 && !!window.GT_FIXTURES['big.json'], detail: '' });
+    res.forEach(function (r) {
+      if (!r.pass) fails++;
+      var d = document.createElement('div');
+      d.className = 'row ' + (r.pass ? 'pass' : 'fail');
+      d.textContent = r.name;
+      out.appendChild(d);
+      if (!r.pass && r.detail) {
+        var p = document.createElement('pre');
+        p.textContent = r.detail;
+        out.appendChild(p);
+      }
+    });
+    var sum = (res.length - fails) + '/' + res.length + ' assertions passed';
+    document.getElementById('sum').textContent = sum;
+    document.title = fails ? 'SMOKE FAIL ' + sum : 'SMOKE OK ' + sum;
+    window.__SMOKE__ = { total: res.length, fails: fails, results: res };
+  });
+}
+</script>
+</body>
+</html>

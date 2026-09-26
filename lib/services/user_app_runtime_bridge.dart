@@ -1,3 +1,5 @@
+export 'plugin_facing_exception.dart' show PluginFacingException;
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -29,6 +31,7 @@ import '../utils/user_app_localization.dart';
 import 'approval_service.dart';
 import 'block_note_scope_service.dart';
 import 'note_modification_service.dart';
+import 'plugin_facing_exception.dart';
 import 'space_scope_service.dart';
 import 'sql_query_service.dart';
 import 'service_locator.dart';
@@ -106,19 +109,6 @@ typedef PickTagsCallback =
       Map<String, dynamic> options,
     );
 
-/// An error whose message was written BY THE HOST for a plugin to display.
-///
-/// Only these are echoed verbatim into the `errors` array returned to plugin
-/// JS. Arbitrary exceptions are redacted, because they can embed absolute
-/// container paths or (from sqflite) a statement plus its bound arguments, i.e.
-/// note content.
-class PluginFacingException implements Exception {
-  PluginFacingException(this.message);
-  final String message;
-  @override
-  String toString() => message;
-}
-
 /// Shared runtime bridge that wires the Synapse JavaScript API into a WebView.
 ///
 /// This bridge is used by both the interactive user app playground and the
@@ -183,8 +173,10 @@ class UserAppRuntimeBridge {
   UserScript? _bootstrapScript;
   String? _bootstrapSpaceJson;
   String? _bootstrapLocaleJson;
+  String? _bootstrapThemeJson;
   String? _publishedSpaceJson;
   String? _publishedLocaleJson;
+  String? _publishedThemeJson;
   bool _pageReady = false;
   bool _detached = false;
   int _documentGeneration = 0;
@@ -254,8 +246,10 @@ class UserAppRuntimeBridge {
     final paramsJson = _buildParamsJson();
     final spaceJson = buildSpaceJson();
     final localeJson = buildLocaleJson();
+    final themeJson = buildThemeJson();
     _bootstrapSpaceJson = spaceJson;
     _bootstrapLocaleJson = localeJson;
+    _bootstrapThemeJson = themeJson;
     final toolEnvFlag = isInteractive ? 'true' : 'false';
 
     final script =
@@ -482,6 +476,7 @@ class UserAppRuntimeBridge {
           Params: $paramsJson,
           space: $spaceJson,
           locale: $localeJson,
+          theme: $themeJson,
         };
 
         if (!window.Synapse.tool) {
@@ -514,6 +509,14 @@ class UserAppRuntimeBridge {
 
   /// Name of the DOM event fired when the Note Synapse UI locale changes.
   static const String localeChangedEvent = 'synapse:localechanged';
+
+  /// Name of the DOM event fired when the app's light/dark setting changes.
+  static const String themeChangedEvent = 'synapse:themechanged';
+
+  /// `window.Synapse.theme`: `"dark"` or `"light"`, from the app's own
+  /// dark-mode setting (not the OS), as a JavaScript string literal.
+  String buildThemeJson() =>
+      jsonEncode(appProvider.isDarkMode ? 'dark' : 'light');
 
   /// The resolved Note Synapse locale as a safely encoded JavaScript string.
   String buildLocaleJson() => jsonEncode(userAppLocaleTag(appProvider.locale));
@@ -595,6 +598,7 @@ class UserAppRuntimeBridge {
     _pageReady = false;
     _publishedSpaceJson = null;
     _publishedLocaleJson = null;
+    _publishedThemeJson = null;
   }
 
   /// Marks the document ready, records its frozen bootstrap context, then
@@ -604,6 +608,7 @@ class UserAppRuntimeBridge {
     _pageReady = true;
     _publishedSpaceJson = _bootstrapSpaceJson ?? buildSpaceJson();
     _publishedLocaleJson = _bootstrapLocaleJson ?? buildLocaleJson();
+    _publishedThemeJson = _bootstrapThemeJson ?? buildThemeJson();
     await republishContextIfChanged();
   }
 
@@ -622,20 +627,25 @@ class UserAppRuntimeBridge {
     if (controller == null || !_pageReady || _detached) return;
     final spaceJson = buildSpaceJson();
     final localeJson = buildLocaleJson();
+    final themeJson = buildThemeJson();
     final spaceChanged = spaceJson != _publishedSpaceJson;
     final localeChanged = localeJson != _publishedLocaleJson;
-    if (!spaceChanged && !localeChanged) return;
+    final themeChanged = themeJson != _publishedThemeJson;
+    if (!spaceChanged && !localeChanged && !themeChanged) return;
     final generation = _documentGeneration;
     final script =
         '''
       (function () {
         var nextSpace = $spaceJson;
         var nextLocale = $localeJson;
+        var nextTheme = $themeJson;
         if (window.Synapse) {
           ${spaceChanged ? 'window.Synapse.space = nextSpace;' : ''}
           ${localeChanged ? 'window.Synapse.locale = nextLocale;' : ''}
+          ${themeChanged ? 'window.Synapse.theme = nextTheme;' : ''}
         }
         ${localeChanged ? "window.dispatchEvent(new CustomEvent('$localeChangedEvent', { detail: nextLocale }));" : ''}
+        ${themeChanged ? "window.dispatchEvent(new CustomEvent('$themeChangedEvent', { detail: nextTheme }));" : ''}
         ${spaceChanged ? "window.dispatchEvent(new CustomEvent('$spaceChangedEvent', { detail: nextSpace }));" : ''}
       })();
     ''';
@@ -644,9 +654,41 @@ class UserAppRuntimeBridge {
       if (_detached || generation != _documentGeneration) return;
       if (spaceChanged) _publishedSpaceJson = spaceJson;
       if (localeChanged) _publishedLocaleJson = localeJson;
+      if (themeChanged) _publishedThemeJson = themeJson;
     } catch (e) {
       LoggerService.warning(
         '[UserAppRuntimeBridge] Could not republish host context: $e',
+      );
+    }
+  }
+
+  /// Name of the DOM event fired when the app's screen is uncovered again.
+  static const String resumedEvent = 'synapse:resumed';
+
+  /// Tells the live page it is visible again after a pushed screen (for
+  /// example a note opened with `Synapse.openNote`) was popped, so a plugin
+  /// that shows note data can refresh. Queued behind any context republish so
+  /// `Synapse.locale`/`space`/`theme` are current when the event fires. A
+  /// no-op before the page has loaded or after [detach].
+  Future<void> notifyResumed() {
+    final next = _publishTail.then((_) => _dispatchResumedNow());
+    _publishTail = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return next;
+  }
+
+  Future<void> _dispatchResumedNow() async {
+    final controller = _controller;
+    if (controller == null || !_pageReady || _detached) return;
+    try {
+      await controller.evaluateJavascript(
+        source: "window.dispatchEvent(new CustomEvent('$resumedEvent'));",
+      );
+    } catch (e) {
+      LoggerService.warning(
+        '[UserAppRuntimeBridge] Could not dispatch $resumedEvent: $e',
       );
     }
   }
@@ -3259,7 +3301,15 @@ class UserAppRuntimeBridge {
               '[Synapse.updateNotes] No-op modification for note: $id',
             );
           } else {
-            await modificationService.applyModifications(id, modification);
+            try {
+              await modificationService.applyModifications(id, modification);
+            } on PluginFacingException catch (e) {
+              // Keep the id in the message so a plugin that sent several
+              // entries can tell which one failed, as with the redacted form.
+              throw PluginFacingException(
+                'Updating note $id failed: ${e.message}',
+              );
+            }
             updatedCount++;
             LoggerService.debug(
               '[Synapse.updateNotes] Applied granular modification to note: $id',

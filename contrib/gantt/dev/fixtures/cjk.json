@@ -1,0 +1,92 @@
+{
+ "v": 1,
+ "settings": {
+  "progressStyle": "segments"
+ },
+ "groups": [
+  {
+   "id": "g1",
+   "title": "需求调研"
+  },
+  {
+   "id": "g2",
+   "title": "设计与开发",
+   "color": "teal"
+  },
+  {
+   "id": "g3",
+   "title": "测试与发布"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "t1",
+   "note": "cjk-note-1",
+   "title": "项目启动会",
+   "start": "2026-10-05",
+   "end": "2026-10-06"
+  },
+  {
+   "id": "t2",
+   "note": "cjk-note-2",
+   "title": "用户访谈（二十位核心用户，覆盖三个城市）",
+   "start": "2026-10-08",
+   "end": "2026-10-16",
+   "group": "g1"
+  },
+  {
+   "id": "t3",
+   "note": "cjk-note-3",
+   "title": "竞品分析",
+   "start": "2026-10-12",
+   "end": "2026-10-19",
+   "group": "g1"
+  },
+  {
+   "id": "t4",
+   "note": "cjk-note-4",
+   "title": "交互设计",
+   "start": "2026-10-19",
+   "end": "2026-10-30",
+   "group": "g2"
+  },
+  {
+   "id": "t5",
+   "note": "cjk-note-5",
+   "title": "同步引擎开发",
+   "start": "2026-10-22",
+   "end": "2026-11-13",
+   "group": "g2",
+   "after": ["t4"]
+  },
+  {
+   "id": "t6",
+   "note": "cjk-note-6",
+   "title": "设计评审",
+   "start": "2026-11-02",
+   "group": "g2",
+   "milestone": true
+  },
+  {
+   "id": "t7",
+   "note": "cjk-note-7",
+   "title": "兼容性测试",
+   "start": "2026-11-09",
+   "end": "2026-11-20",
+   "group": "g3"
+  },
+  {
+   "id": "t8",
+   "title": "正式发布",
+   "start": "2026-11-24",
+   "group": "g3",
+   "milestone": true
+  },
+  {
+   "id": "t9",
+   "note": "cjk-note-9",
+   "title": "撰写发布说明",
+   "group": "g3"
+  }
+ ]
+}

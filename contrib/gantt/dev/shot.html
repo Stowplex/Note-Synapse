@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!--
+  The real shell over the mock host, for screenshots and the app_smoke frames.
+  ?fixture=&theme=&today=&locale=&launch=&space= (see dev/shell.js). Serve
+  contrib/gantt, then for example:
+    chrome --headless=new --screenshot=<scratch>/x.png --window-size=390,844
+      --force-device-scale-factor=3 --hide-scrollbars
+      "http://127.0.0.1:8791/dev/shot.html?fixture=region-basic.md&theme=dark"
+-->
+<script src="shell.js"></script>
+<script>
+  // ?w=&h= puts the app in an iframe of exactly that size: headless Chrome
+  // will not make a window narrower than about 500 px, so a 390 px phone
+  // layout needs its own frame (the screenshot crops the rest).
+  if (GTDev.params.w && !GTDev.params.inner) GTDev.writeFrame(GTDev.params.w, GTDev.params.h);
+  else GTDev.writeShell();
+</script>
+</head>
+</html>

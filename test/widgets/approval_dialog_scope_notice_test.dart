@@ -202,4 +202,49 @@ void main() {
     expect(find.textContaining('__scopeBlock'), findsNothing);
     expect(find.textContaining('selected block only'), findsOneWidget);
   });
+
+  group('subnote changes are rendered, not shown as a raw map', () {
+    const subnote = {
+      'subnote': {
+        'added': [
+          {'name': 'Buy milk'},
+        ],
+        'removed': ['s9'],
+        'updated': [
+          {'id': 's1', 'isCompleted': true},
+          {'id': 's2', 'isCompleted': true},
+          {'id': 's3', 'isCompleted': false, 'name': 'Call Ana'},
+          {'id': 's4', 'content': 'details'},
+        ],
+      },
+    };
+
+    String details(WidgetTester tester, String marker) => tester
+        .widgetList<SelectableText>(find.byType(SelectableText))
+        .map((w) => w.data ?? '')
+        .firstWhere((d) => d.contains(marker));
+
+    testWidgets('in English', (tester) async {
+      await pumpDialog(tester, subnote);
+      final text = details(tester, 'Sub-Note');
+      expect(text, contains('• Add Sub-Notes: Buy milk'));
+      expect(text, contains('• Remove 1 Sub-Note(s)'));
+      expect(text, contains('• Mark 2 Sub-Note(s) Done'));
+      expect(text, contains('• Mark 1 Sub-Note(s) Not Done'));
+      expect(text, contains('• Rename Sub-Notes To: Call Ana'));
+      expect(text, contains('• Edit Content of 1 Sub-Note(s)'));
+      expect(text, isNot(contains('{')));
+    });
+
+    testWidgets('in Chinese', (tester) async {
+      await pumpDialog(tester, subnote, locale: const Locale('zh', 'CN'));
+      final text = details(tester, '子笔记');
+      expect(text, contains('• 添加子笔记：Buy milk'));
+      expect(text, contains('• 移除 1 条子笔记'));
+      expect(text, contains('• 将 2 条子笔记标记为已完成'));
+      expect(text, contains('• 将 1 条子笔记标记为未完成'));
+      expect(text, contains('• 将子笔记重命名为：Call Ana'));
+      expect(text, contains('• 修改 1 条子笔记的内容'));
+    });
+  });
 }
