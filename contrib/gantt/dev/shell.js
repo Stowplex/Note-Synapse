@@ -54,6 +54,14 @@
  *   do       also: tasklist (More > Task list), locale:<tag> (a live
  *            synapse:localechanged)
  * Task notes whose id starts with "missing-" are not created (missing notes).
+ * G3:
+ *   do       also: gsheet:<group> (the group sheet), groups (More > Groups),
+ *            gfold:<group>, growrow (scroll the open task sheet to its Group
+ *            row), dropg:<task>:<group> and slot:<task> (a REORDER preview
+ *            held on that header's band or on the No-group slot)
+ * G2:
+ *   wrote    1 seeds the cache's `wk` with the chart note's body key (the
+ *            removal banner's gate); every note the fixture links to exists.
  */
 (function (global) {
   'use strict';
@@ -130,6 +138,14 @@
       notes.push({ id: 'shared-chart', title: 'Shared chart', content: B.region(other, null, {}), tags: ['all-spaces'] });
     }
     notes.push({ id: 'plain-note', title: 'A plain note', content: 'Nothing to chart here.', tags: tags });
+    // G2: every other note the chart note links to exists too (seed and
+    // Add offers read their titles and dates), titled by its link text.
+    var have = {};
+    notes.forEach(function (n) { have[n.id] = true; });
+    content.replace(/\[([^\]\n]*)\]\(synapseresource:\/\/note\/([A-Za-z0-9_-]+)(?:\?via=gantt)?\)/g, function (m, text, id) {
+      if (!have[id] && !/^missing-/.test(id)) { have[id] = true; notes.push({ id: id, title: text || id, type: 'task', status: 'todo', tags: tags, content: 'Notes for ' + text + '.' }); }
+      return m;
+    });
     if (o.kept) notes[0].content = o.kept;
     return { notes: notes, chartId: 'chart-note', chart: chart };
   };
@@ -220,6 +236,19 @@
     seed.notes[0].content = seed.notes[0].content.replace(fr.region.text, B.region(ch, null, {}));
     seed.chart = ch;
   }
+  // wrote=1 (G2): the cache says this device wrote the chart note's block
+  // (`wk`), so the removal banner's gate is open for a hand-edited list.
+  function seedWrote(o, seed, storage) {
+    var GT = global.GT, fr = GT.block.read(seed.notes[0].content, { list: true });
+    if (!fr.bodyKey) return;
+    var key = 'gt-mock-appstate:' + appIdOf(o), raw = null;
+    try { raw = storage && typeof storage.get === 'function' ? storage.get(key) : global.sessionStorage.getItem(key); } catch (e) { raw = null; }
+    var blob = raw ? JSON.parse(raw) : { v: 1 };
+    blob.charts = blob.charts || {};
+    blob.charts['chart-note'] = { at: 1, facts: {}, wk: fr.bodyKey };
+    if (storage && typeof storage.set === 'function') storage.set(key, JSON.stringify(blob));
+    else global.sessionStorage.setItem(key, JSON.stringify(blob));
+  }
   // prefs=<k:v,...>: appState prefs written by an earlier launch.
   function seedPrefs(o, storage) {
     if (!o.prefs) return;
@@ -259,6 +288,7 @@
     var storage = o.persist === '1' ? undefined : new Map();
     if (o.entry) seedEntry(o, seed, storage);
     applySet(o, seed);
+    if (o.wrote === '1') seedWrote(o, seed, storage);
     seedPrefs(o, storage);
     // noteMove=<taskId>:<days>: the chart note already holds that task moved
     // (an edit elsewhere since the journal entry's base), for Restore conflicts.
@@ -353,6 +383,47 @@
         // M9: the Task list view, and a live locale switch.
         else if (p[0] === 'tasklist') A.openTaskList();
         else if (p[0] === 'locale') GTDev.mock.emit('localechanged', p[1]);
+        // G0: the Add milestone create sheet, a note-less milestone, and a
+        // draft typed into the open task sheet's name field (shows [Rename]).
+        else if (p[0] === 'milestone') { if (p[1]) A.select(p[1]); A.addMilestone(); }
+        else if (p[0] === 'msadd') {
+          var ms = GT.model.addTasks(c, [{ milestone: true, title: decodeURIComponent(p[1] || 'Milestone'), start: GT.dates.parse('2026-10-22') }], { index: 2 });
+          A.commitEdit(ms, 'Add milestone', ms.added[0]);
+          A.select(ms.added[0]);
+          A.openSheet(ms.added[0], 'peek');
+        }
+        // G3: the group sheet, More > Groups, a group folded, the task
+        // sheet's Group row, and a REORDER preview held on a header band
+        // (dropg:<task>:<group>, the group folded first) or on the slot.
+        else if (p[0] === 'gsheet') A.openGroupSheet(p[1]);
+        else if (p[0] === 'groups') A.openGroups();
+        else if (p[0] === 'gfold') { if (S.collapsed.indexOf(p[1]) < 0) A.toggleGroup(p[1]); }
+        else if (p[0] === 'growrow') {
+          var gr = document.querySelector('#sheet [data-field="group"]');
+          if (gr) { var body = document.querySelector('#sheet .sheet-body'); body.scrollTop = Math.max(0, gr.offsetTop - 120); }
+        }
+        else if (p[0] === 'dropg' || p[0] === 'slot') {
+          A.select(p[1]);
+          S.view.flushNow();
+          var sl = S.view.setDragSlot(true), rows = S.view.rows(), L = GT.layout, hit = [];
+          for (var y = 0; y < 4000; y++) {
+            var tg = L.reorderTarget(rows, c, p[1], y);
+            if (tg && tg.changed && (p[0] === 'slot' ? tg.slot : tg.into === p[2])) hit.push({ y: y, tg: tg });
+          }
+          var h = hit[Math.floor(hit.length / 2)], row = rows.filter(function (r) { return r.kind === 'task' && r.id === p[1]; })[0];
+          if (h && row) {
+            var mid = row.y + row.h / 2, g = h.tg.group ? GT.model.group(c, h.tg.group) : null;
+            S.view.setPreview({ kind: 'reorder', id: p[1], dy: h.y - mid, from: h.tg.from, lo: h.tg.lo, hi: h.tg.hi, dir: h.tg.dir, hd: row.h,
+              bubble: '→ ' + (g ? g.title : GT.i18n.text('No group')), bx: 60, by: h.y - S.view.camera().sy,
+              group: h.tg.group, into: h.tg.into, slot: !!h.tg.slot, hidden: !!h.tg.hidden, changed: true });
+            document.getElementById('gantt').classList.add('live');
+          }
+          GTDev.slot = sl;
+        }
+        else if (p[0] === 'draft') {
+          var ni = document.querySelector('#sheet [data-field="name"] input');
+          if (ni) { ni.value = decodeURIComponent(p[1] || ''); ni.dispatchEvent(new Event('input', { bubbles: true })); }
+        }
       });
       A.syncUi();
     });

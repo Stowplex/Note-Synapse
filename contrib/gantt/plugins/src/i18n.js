@@ -98,7 +98,8 @@
     'Day': '日', 'Week': '周', 'Month': '月', 'Quarter': '季度',
     'Week starts on': '每周开始于', 'Sunday': '星期日', 'Monday': '星期一',
     'Working days': '工作日', 'Holidays': '节假日', 'Add holiday': '添加节假日',
-    'Readable task list in the note': '在笔记中显示可读的任务列表',
+    // Task-groups plan §7.1: the list switch's label (was "Readable task list in the note").
+    'Task list above the chart': '图表上方的任务列表',
     'Show the chart inside the note': '在笔记中显示图表',
     'Write dates to task notes (shows in Calendar)': '将日期写入任务笔记（显示在日历中）',
     'Rows': '行高', 'Regular': '标准', 'Compact': '紧凑', 'Shade weekends': '周末底纹', 'Week numbers': '周数',
@@ -120,7 +121,41 @@
     // Export image (§12.9).
     'Export image': '导出图片', 'Show': '范围', 'Whole chart': '整个图表', 'What is on screen': '当前屏幕',
     'Attach to chart note': '添加到图表笔记', 'Preparing the image…': '正在生成图片…', 'Couldn’t make the image.': '无法生成图片。',
-    'The image was not attached: not approved': '图片未添加：未获批准', 'Couldn’t attach the image.': '无法添加图片。'
+    'The image was not attached: not approved': '图片未添加：未获批准', 'Couldn’t attach the image.': '无法添加图片。',
+    // G0: naming tasks and milestones (task-groups plan §8.9, §9).
+    'Note title': '笔记标题',
+    'Renames the note itself, everywhere it appears.': '会重命名笔记本身，所有出现的地方都会改变。',
+    'The note was not renamed: not approved': '笔记未重命名：未获允许',
+    'The note was not renamed': '笔记未重命名',
+    'Dates are written to the note the next time you move it': '下次移动时会把日期写入笔记',
+    'New milestone': '新里程碑',
+    'Link to a note…': '关联笔记…',
+    'Link note…': '关联笔记…',
+    'Already on this chart': '已在此图表中',
+    'Rename note': '重命名笔记',
+    'Link note': '关联笔记',
+    // G1: the task list heading (task-groups plan §5.6, §9).
+    'Restore heading': '恢复标题',
+    'Task list heading': '任务列表标题',
+    'Turn list off': '关闭列表',
+    'Restore the task list heading to save': '恢复任务列表标题后才能保存',
+    // G2: two-way sync, seed and banners (task-groups plan §6.3, §9).
+    'Groups reordered': '分组顺序已更新',
+    'Tasks reordered': '任务顺序已更新',
+    'Undo note changes': '撤销笔记中的更改',
+    'Not now': '暂不',
+    'Use as groups': '用作分组',
+    'Make groups': '设为分组',
+    // G3: chart UX and group management (task-groups plan §8, §9).
+    'Drag tasks here': '将任务拖到这里',
+    'Add group': '添加分组', 'Groups': '分组', 'Group name': '分组名称', 'A group needs a name': '分组需要名称',
+    'New group…': '新建分组…', 'Move to new group': '移到新分组', 'Move up': '上移', 'Move down': '下移',
+    'Delete group': '删除分组', 'Tap again to delete the group': '再点一次以删除分组',
+    'Heading level': '标题级别', 'This name is the task list heading': '这个名称与任务列表标题相同',
+    'Collapse': '折叠', 'Expand': '展开', 'Removed from its group': '已移出分组',
+    'The task list needs a heading': '任务列表需要标题',
+    // Undo labels of group edits.
+    'Rename group': '重命名分组', 'Group colour': '分组颜色', 'Move group': '移动分组', 'Move to group': '移到分组'
   };
 
   var language = 'en-US';
@@ -194,7 +229,27 @@
     // M9
     '{title}, {n} task(s)': '{title}，{n} 个任务',
     'Removed in the note: {titles}. Remove from chart?': '笔记中已删除：{titles}。要从图表中移除吗？',
-    '{n} more': '另外 {n} 个'
+    '{n} more': '另外 {n} 个',
+    // G1: the task list heading (task-groups plan §5.6, §9).
+    'The “{heading}” heading above the task list is missing.': '任务列表上方的“{heading}”标题不见了。',
+    'Use “{text}” as the list heading': '把“{text}”用作任务列表标题',
+    // G2: two-way sync, seed and banners (task-groups plan §6.3, §9).
+    'Updated from the note: {changes}': '已根据笔记更新：{changes}',
+    '{task} → {group}': '{task} → {group}',
+    '{old} renamed to {new}': '“{old}”已改名为“{new}”',
+    'New group {title}': '新分组“{title}”',
+    'and {n} more': '等 {n} 项',
+    '{title} (group)': '{title}（分组）',
+    'Added in the note: {titles}. Add to chart?': '笔记中新增了：{titles}。要加入图表吗？',
+    'Use these headings as groups? The note lists {n} task(s) in {m} group(s) above the chart.': '把这些标题用作分组？笔记在图表上方的 {m} 个分组中列出了 {n} 个任务。',
+    'Make “{title}” a group?': '把“{title}”设为分组？',
+    'Make {titles} groups?': '把{titles}设为分组？',
+    'Listed more than once in the note: {titles}. Delete one copy to let the chart update it.': '笔记中重复列出了：{titles}。删除其中一处后图表才会更新它。',
+    // G3: chart UX and group management (task-groups plan §8, §9).
+    '{n} unscheduled': '{n} 个未排期',
+    '{title}, {n} task(s), {m} unscheduled': '{title}，{n} 个任务，{m} 个未排期',
+    'Moved to {group}': '已移到“{group}”',
+    'Deleted group “{title}”. Its tasks are now ungrouped.': '已删除分组“{title}”，其中的任务已移出分组。'
   };
   function fmt(key, vars) {
     vars = vars || {};

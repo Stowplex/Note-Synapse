@@ -5,8 +5,9 @@
  * Rows are flattened in D15 order: ungrouped scheduled tasks with no
  * header, then per group a header row and its scheduled tasks (skipped when
  * collapsed), then the synthetic Unscheduled group holding every task with
- * no start. Each row is {kind, id, task, group, gi, y, h, n, collapsed}
- * with a prefix-sum y.
+ * no start. Each row is {kind, id, task, group, gi, y, h, n, un, empty,
+ * collapsed} with a prefix-sum y; a live REORDER drag may add the slot row
+ * (kind 'slot', task-groups plan §8.1).
  */
 (function (global) {
   'use strict';
@@ -39,17 +40,26 @@
   };
 
   /*
-   * buildRows(chart, collapsed, density, opts) -> {rows, totalH, index, groups}
+   * buildRows(chart, collapsed, density, opts) -> {rows, totalH, index, groups, slot}
    *   collapsed  Set, array or map of group ids (L.UNSCHED collapses the
    *              Unscheduled group)
    *   opts.rowH  row height override (tablet, §14.1)
+   *   opts.dragSlot  a REORDER drag is live: a chart with groups and no
+   *              scheduled ungrouped task gets the No-group slot row
+   *              {kind: 'slot', id: L.NOGROUP} of task-row height above
+   *              the first header (task-groups plan §8.1)
    *   index      taskId -> row index (absent when its group is collapsed)
    *   groups     groupId -> row index of the header
+   *   slot       row index of the slot row, or -1
+   * A group header counts every member (task-groups plan §8.7): n all of
+   * them, un the undated ones (they render under Unscheduled); empty when
+   * no task names the group (§8.8).
    */
+  L.NOGROUP = '~nogroup';         // the slot row's id, never a valid group id
   L.buildRows = function (chart, collapsed, density, opts) {
     opts = opts || {};
     var d = L.dens(density, opts.rowH);
-    var rows = [], index = {}, groups = {}, y = 0;
+    var rows = [], index = {}, groups = {}, y = 0, slot = -1;
     var known = {};
     chart.groups.forEach(function (g, i) { known[g.id] = i; });
     function push(r) { r.y = y; y += r.h; rows.push(r); return r; }
@@ -61,11 +71,17 @@
     chart.tasks.forEach(function (t) {
       if (scheduled(t) && !(t.group && Object.prototype.hasOwnProperty.call(known, t.group))) taskRow(t, null, -1);
     });
+    if (opts.dragSlot && chart.groups.length && !rows.length) {
+      slot = 0;
+      push({ kind: 'slot', id: L.NOGROUP, task: null, group: null, gi: -1, h: d.row });
+    }
     chart.groups.forEach(function (g, gi) {
-      var list = chart.tasks.filter(function (t) { return t.group === g.id && scheduled(t); });
+      var all = chart.tasks.filter(function (t) { return t.group === g.id; });
+      var list = all.filter(scheduled);
       var shut = isSet(collapsed, g.id);
       groups[g.id] = rows.length;
-      push({ kind: 'group', id: g.id, task: null, group: g, gi: gi, h: d.grp, n: list.length, collapsed: shut });
+      push({ kind: 'group', id: g.id, task: null, group: g, gi: gi, h: d.grp, n: all.length, un: all.length - list.length,
+        empty: all.length === 0, collapsed: shut });
       if (!shut) list.forEach(function (t) { taskRow(t, g, gi); });
     });
     var un = chart.tasks.filter(function (t) { return !scheduled(t); });
@@ -80,8 +96,16 @@
         });
       }
     }
-    return { rows: rows, totalH: y, index: index, groups: groups, dens: d };
+    return { rows: rows, totalH: y, index: index, groups: groups, dens: d, slot: slot };
   };
+
+  /*
+   * slotShift(sy, h) -> how far the camera's sy grows when the h px slot
+   * row appears at the top (§8.1): h when sy >= h, so no row moves on
+   * screen; 0 at the top of the list, where the rows below slide down.
+   * The drop takes the same amount off again.
+   */
+  L.slotShift = function (sy, h) { return sy >= h ? h : 0; };
 
   /*
    * visibleRange(rows, y0, y1) -> {first, last}: the rows that intersect
@@ -176,28 +200,114 @@
    *           (dir -1 up, +1 down; lo > hi when none shift)
    *   y       the content y of the dropped row's top in the current rows
    *   changed whether a drop here changes the chart
+   *   into    (header band) the group entered at its end: no row shifts
+   *   slot    (No-group slot) true: the task leaves every group
+   *   hidden  the result is out of sight (a collapsed group, or an
+   *           unscheduled task's new group): the owner confirms the drop
    * A scheduled task stays among the scheduled rows; an unscheduled one
-   * stays inside the Unscheduled group (it has no dates to show elsewhere).
+   * stays inside the Unscheduled group (it has no dates to show elsewhere)
+   * and changes group only on a header band or the slot, keeping its index.
    * Collapsed group headers are targets like any header.
+   *
+   * Task-groups plan §8.1: the slot row (buildRows dragSlot) is a candidate
+   * of its own; every drop above the first header's zone, or right after
+   * the slot, leaves the task's group. A collapsed header, or one with no
+   * task rows but the dragged one, splits the zone before it at its
+   * midpoint: the upper half stays "before H", the lower half is "into H"
+   * (the end of that group). In the dragged row's own slot the split is
+   * taken between its resting centre and the header's threshold, so a
+   * drop in place still changes nothing.
    */
-  L.reorderTarget = function (rows, chart, id, y) {
-    var from = -1, uIdx = rows.length;
+  function geo(rows, id) {
+    var from = -1, uIdx = rows.length, slot = -1;
     for (var i = 0; i < rows.length; i++) {
       if (rows[i].kind === 'task' && rows[i].id === id) from = i;
       if (rows[i].kind === 'group' && rows[i].id === L.UNSCHED) uIdx = i;
+      if (rows[i].kind === 'slot') slot = i;
     }
     if (from < 0) return null;
-    var task = rows[from].task, hd = rows[from].h;
-    var sched = typeof task.start === 'number';
-    // The candidate rows of the dragged row's region, in order, without it.
-    var lo0 = sched ? 0 : uIdx, hi0 = sched ? uIdx - 1 : rows.length - 1;
-    var cand = [];
-    for (var k = lo0; k <= hi0; k++) if (k !== from) cand.push(k);
+    var hd = rows[from].h, task = rows[from].task;
+    var o = { from: from, uIdx: uIdx, slot: slot, hd: hd, task: task, sched: typeof task.start === 'number', sc: [], own: 0 };
     // Heights as if the dragged row were gone. A row is above the dragged
     // one once the dragged edge passed its middle: its top plus half of
     // both heights is above the dragged centre (rows of different heights
     // swap symmetrically, and a drop in place changes nothing).
-    function yWithout(k) { return k > from ? rows[k].y - hd : rows[k].y; }
+    o.yW = function (k) { return k > from ? rows[k].y - hd : rows[k].y; };
+    o.thr = function (k) { return o.yW(k) + (rows[k].h + hd) / 2; };
+    o.rest = rows[from].y + hd / 2;
+    // The scheduled candidates, and where the dragged row's own slot is among them.
+    for (var k = 0; k < uIdx; k++) if (k !== from) { o.sc.push(k); if (k < from) o.own++; }
+    return o;
+  }
+  // A collapsed header, or one with no task rows but the dragged one.
+  function bandable(rows, o, k) {
+    var r = rows[k];
+    if (r.kind !== 'group' || r.id === L.UNSCHED) return false;
+    if (r.collapsed) return true;
+    for (var j = k + 1; j < rows.length && rows[j].kind === 'task'; j++) if (j !== o.from) return false;
+    return true;
+  }
+  // The band split of candidate ps (a bandable header), in content y.
+  function split(rows, o, ps) {
+    var h = o.sc[ps];
+    var top = ps === o.own ? o.rest : (ps > 0 ? o.thr(o.sc[ps - 1]) : o.yW(h) + o.hd / 2);
+    return (top + o.thr(h)) / 2;
+  }
+  // The index of task `id` once model.moveToGroup put it at the end of gid.
+  function endIndex(chart, id, gid) {
+    var ts = GT.model.moveToGroup(chart, id, gid).chart.tasks;
+    for (var i = 0; i < ts.length; i++) if (ts[i].id === id) return i;
+    return 0;
+  }
+  function curIndex(chart, id) {
+    for (var c = 0; c < chart.tasks.length; c++) if (chart.tasks[c].id === id) return c;
+    return -1;
+  }
+  // A header band or the slot under y, or null. keys: no band or slot for
+  // an unscheduled task (the keyboard keeps it inside Unscheduled).
+  function special(rows, chart, id, o, y, keys) {
+    if (!o.sched && (keys || y > o.thr(o.uIdx))) return null;
+    var sc = o.sc, ps = 0;
+    while (ps < sc.length && o.thr(sc[ps]) < y) ps++;
+    var band = -1;
+    if (ps < sc.length && bandable(rows, o, sc[ps]) && y > split(rows, o, ps)) band = sc[ps];
+    var onSlot = band < 0 && o.slot >= 0 && (ps === 0 || sc[ps - 1] === o.slot);
+    if (band < 0 && !onSlot) return null;
+    var gid = band >= 0 ? rows[band].id : null, task = o.task;
+    var out = {
+      index: o.sched ? endIndex(chart, id, gid) : curIndex(chart, id), group: gid, from: o.from, lo: 0, hi: -1, dir: 0,
+      y: band >= 0 ? o.yW(band) + rows[band].h : o.yW(o.slot), changed: false
+    };
+    if (band >= 0) out.into = gid; else out.slot = true;
+    var had = validGroup(chart, task.group) ? task.group : null;
+    out.changed = gid !== had;
+    // A shadow group id stays when the task stays ungrouped (§5.3).
+    if (gid === null && !had) out.group = undefined;
+    out.hidden = hiddenDrop(rows, o, out.group);
+    return out;
+  }
+  /*
+   * Review round 1: whether the drop's result is out of sight, so the
+   * owner confirms it (flash, toast "Moved to …"): a scheduled task
+   * entering a collapsed group, or an unscheduled task changing group (its
+   * row stays under Unscheduled).
+   */
+  function hiddenDrop(rows, o, group) {
+    if (typeof group !== 'string') return !o.sched && group === null;
+    if (!o.sched) return true;
+    for (var i = 0; i < o.uIdx; i++) if (rows[i].kind === 'group' && rows[i].id === group) return !!rows[i].collapsed;
+    return false;
+  }
+  L.reorderTarget = function (rows, chart, id, y) { return target(rows, chart, id, y, false); };
+  function target(rows, chart, id, y, keys) {
+    var o = geo(rows, id);
+    if (!o) return null;
+    var sp = special(rows, chart, id, o, y, keys);
+    if (sp) return sp;
+    var from = o.from, uIdx = o.uIdx, task = o.task, hd = o.hd, sched = o.sched, yWithout = o.yW;
+    // The candidate rows of the dragged row's region, in order, without it.
+    var cand = sched ? o.sc : [];
+    if (!sched) for (var k = uIdx; k < rows.length; k++) if (k !== from) cand.push(k);
     var p = 0;
     while (p < cand.length && yWithout(cand[p]) + (rows[cand[p]].h + hd) / 2 < y) p++;
     if (!sched && p < 1) p = 1;                       // never above the Unscheduled header
@@ -241,7 +351,37 @@
     while (own < cand.length && cand[own] < from) own++;
     out.changed = p !== own && (index !== cur || (out.group !== undefined && out.group !== task.group));
     if (!out.changed) { out.lo = 0; out.hi = -1; out.dir = 0; }
+    out.hidden = hiddenDrop(rows, o, out.group);
     return out;
+  }
+
+  /*
+   * stepTarget(rows, chart, id, dir) -> the reorderTarget of the next slot
+   * up (dir -1) or down (+1) from the task's own row that changes the
+   * chart, or null (Alt+Up/Down, §13.2, task-groups plan §8.11). It tries
+   * each zone boundary in turn (row thresholds and header band splits), so
+   * a task alone in its group steps past its own header's band. An
+   * unscheduled task stays inside Unscheduled.
+   */
+  L.stepTarget = function (rows, chart, id, dir) {
+    var o = geo(rows, id);
+    if (!o || !dir) return null;
+    var cut = [], k;
+    if (o.sched) {
+      for (k = 0; k < o.sc.length; k++) {
+        cut.push(o.thr(o.sc[k]));
+        if (bandable(rows, o, o.sc[k])) cut.push(split(rows, o, k));
+      }
+    } else {
+      for (k = o.uIdx; k < rows.length; k++) if (k !== o.from) cut.push(o.thr(k));
+    }
+    cut.sort(function (a, b) { return dir < 0 ? b - a : a - b; });
+    for (k = 0; k < cut.length; k++) {
+      if (dir < 0 ? cut[k] >= o.rest : cut[k] <= o.rest) continue;
+      var t = target(rows, chart, id, cut[k] + dir * 0.5, true);
+      if (t && t.changed) return t;
+    }
+    return null;
   };
   function validGroup(chart, gid) {
     if (!gid) return false;

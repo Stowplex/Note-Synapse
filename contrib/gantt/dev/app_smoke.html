@@ -127,10 +127,45 @@ var FRAMES = {
   exzh: 'fixture=cjk.json&launch=note&locale=zh-CN&frame=timer&app=gt-smoke-exzh',
   // ... review round 1: failure paths.
   exfail: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-exfail',
-  exdeny2: 'fixture=region-basic.md&launch=note&frame=timer&approvals=deny&app=gt-smoke-exdeny2'
+  exdeny2: 'fixture=region-basic.md&launch=note&frame=timer&approvals=deny&app=gt-smoke-exdeny2',
+  // G0 (task-groups plan §8.9): naming tasks and milestones.
+  nm: 'fixture=region-basic.md&launch=note&frame=timer&set=syncDates:true&app=gt-smoke-nm',
+  nmzh: 'fixture=region-basic.md&launch=note&locale=zh-CN&frame=timer&app=gt-smoke-nmzh',
+  nmng: 'fixture=empty.json&launch=note&frame=timer&app=gt-smoke-nmng',
+  nmuns: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-nmuns',
+  // G1 (task-groups plan §5): migration on save, attached text across a drag, the missing heading banner.
+  g1mig: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-g1mig',
+  g1att: 'fixture=list-attached-notes.md&launch=note&frame=timer&app=gt-smoke-g1att',
+  g1mh: 'fixture=list-missing-heading-prose.md&launch=note&frame=timer&app=gt-smoke-g1mh',
+  g1ty: 'fixture=list-missing-heading-typo.md&launch=note&frame=timer&app=gt-smoke-g1ty',
+  g1off: 'fixture=list-missing-heading-prose.md&launch=note&frame=timer&app=gt-smoke-g1off',
+  // G2 (task-groups plan §5.5, §6.3): the seed offer (the request's own
+  // example in three variants, and after a save) and edits made in the note.
+  sdb: 'fixture=seed-basic.md&launch=note&frame=timer&app=gt-smoke-sdb',
+  sdm: 'fixture=seed-basic-mirror.md&launch=note&frame=timer&app=gt-smoke-sdm',
+  sde: 'fixture=seed-basic-embed.md&launch=note&frame=timer&app=gt-smoke-sde',
+  sda: 'fixture=seed-after-save.md&launch=note&frame=timer&app=gt-smoke-sda',
+  sdn: 'fixture=seed-basic.md&launch=note&frame=timer&app=gt-smoke-sdn',
+  sdz: 'fixture=seed-basic.md&launch=note&frame=timer&locale=zh-CN&app=gt-smoke-sdz',
+  ns: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-ns',
+  nsopen: 'fixture=list-new-heading.md&launch=note&frame=timer&app=gt-smoke-nsopen',
+  // G3 (task-groups plan §8): drags between groups, autoscroll over 300 rows,
+  // the group sheet, adding groups, keys, collapse and the aria audit.
+  gd: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-gd',
+  gdl: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gdl',
+  gdu: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-gdu',
+  gsc: 'fixture=big300.json&launch=note&frame=timer&app=gt-smoke-gsc',
+  gsh: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-gsh',
+  gad: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gad',
+  gky: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-gky',
+  gco: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-gco',
+  gst: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gst',
+  gsm: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gsm',
+  gwl: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gwl',
+  gax: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-gax'
 };
 // Landscape phone frames; the rest are 390 x 780.
-var SIZES = { land: [844, 390], bigLand: [844, 390], sideLand: [844, 390], r19l: [844, 390], dfl: [844, 390] };
+var SIZES = { gwl: [844, 390], land: [844, 390], bigLand: [844, 390], sideLand: [844, 390], r19l: [844, 390], dfl: [844, 390] };
 // Releases for the hold= frames, and a clean slate for their appState.
 window.GT_RELEASE = {};
 ['gt-smoke-rl', 'gt-smoke-hl', 'gt-smoke-au', 'gt-smoke-prf', 'gt-smoke-df'].forEach(function (a) {
@@ -1398,6 +1433,9 @@ function edit() {
     eq('edit: the FAB opens its menu', s.sheet.kind(), 'menu');
     var n = s.session.live.tasks.length;
     d.querySelector('#sheet [data-item="milestone"]').click();
+    // G0: Add milestone opens a create sheet; Create with an empty title.
+    eq('edit: Add milestone opens its create sheet', s.sheet.kind(), 'milestone');
+    d.querySelector('#sheet [data-action="create"]').click();
     eq('edit: Add milestone adds a task', s.session.live.tasks.length, n + 1);
     ok('edit: ... a milestone at today, selected', task(W, s.sel).milestone && ymd(W, task(W, s.sel).start) === '2026-10-20');
     return saved(W).then(function () { return A.undo(); }).then(function () { return saved(W); }).then(function () {
@@ -1839,7 +1877,7 @@ function membership() {
     v.setCamera({ sx: v.camera().sx, sy: 0, ppd: v.camera().ppd });
     flush(W);
     d.getElementById('fab').click();
-    eq('mem: the FAB menu', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-item'), function (b) { return b.getAttribute('data-item'); }).join(','), 'existing,create,milestone');
+    eq('mem: the FAB menu', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-item'), function (b) { return b.getAttribute('data-item'); }).join(','), 'existing,create,milestone,group');
     // A debounced edit is waiting: "Add existing notes" must save it before the picker (§8).
     A.commitEdit(W.GT.model.moveTask(s.session.live, 't3', 1), 'Move', 't3', { save: 'debounce' });
     mock.events.length = 0;
@@ -2186,7 +2224,7 @@ function zhNewChart() {
     return s.session.checked;
   }).then(function () {
     d.getElementById('fab').click();
-    eq('zh: the FAB menu in zh-CN', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-item .sh-il'), function (e) { return e.textContent; }).join(','), '添加已有笔记,新建任务笔记,添加里程碑');
+    eq('zh: the FAB menu in zh-CN', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-item .sh-il'), function (e) { return e.textContent; }).join(','), '添加已有笔记,新建任务笔记,添加里程碑,添加分组');
     d.querySelector('#sheet [data-item="create"]').click();
     eq('zh: the create sheet shows the chart\'s section, read-only', d.querySelector('#sheet [data-field="section"] .sh-note').textContent, '清单');
     field(W, 'title').value = '任务一';
@@ -3643,6 +3681,1550 @@ function exportFailFlow() {
   });
 }
 
+/*
+ * G0 (task-groups plan §8.9, §10.2 `naming`): the Add milestone create
+ * sheet, the Title field of a note-less milestone, Link note…, and the
+ * Note title field that renames a task's note.
+ */
+function nmKey(W, target, k) { target.dispatchEvent(new W.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); }
+function nmType(W, inp, v) { inp.value = v; inp.dispatchEvent(new W.Event('input', { bubbles: true })); }
+function nmChange(W, inp) { inp.dispatchEvent(new W.Event('change', { bubbles: true })); }
+function nmName(W) { return W.document.querySelector('#sheet [data-field="name"] input'); }
+function nmBtn(W) { return W.document.querySelector('#sheet [data-action="rename-note"]'); }
+function nmChips(W) { return Array.prototype.slice.call(W.document.querySelectorAll('#sheet [data-field="group"] button')); }
+function nmUps(W, id) { return W.GTDev.mock.updates.filter(function (l) { return l.some(function (x) { return x.id === id; }); }).length; }
+function nmTitleEntries(W, from) {
+  var out = [];
+  W.GTDev.mock.updates.slice(from || 0).forEach(function (l) { l.forEach(function (x) { if (x.modification && x.modification.title) out.push(x); }); });
+  return out;
+}
+function naming() {
+  var W, s, d, A, m, st, ids, commits = 0, mA, mFresh;
+  function undoN() { return s.stack.size().undo; }
+  function tasks() { return s.session.live.tasks; }
+  function openCreate(sel) {
+    // A programmatic select leaves the focus where it was: drop it, so a
+    // sheet handing the focus back does not select another row.
+    if (d.activeElement && d.activeElement !== d.body) d.activeElement.blur();
+    if (sel) A.select(sel);
+    d.getElementById('fab').click();
+    d.querySelector('#sheet [data-item="milestone"]').click();
+  }
+  return ready('nm').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; st = s.store; ids = W.GTDev.EXAMPLE_IDS;
+    A.dismissNotice();
+    // Every chart commit, counted where the app calls it.
+    var orig = st.commit;
+    st.commit = function () { commits++; return orig.apply(st, arguments); };
+    // --- the create sheet
+    openCreate('t2');
+    eq('naming: Add milestone opens the create sheet', s.sheet.kind() + '|' + d.getElementById('sheet-title').textContent, 'milestone|New milestone');
+    var ti = field(W, 'title');
+    eq('naming: its Title is empty, placeholder "Milestone"', ti.value + '|' + ti.placeholder, '|Milestone');
+    ok('naming: opened by touch, the Title is not focused (no soft keyboard over Create)', d.activeElement !== ti && s.sheet.detent() === 'full');
+    var lab0 = d.querySelector('#sheet [data-field="title"] .sh-flab');
+    ok('naming: unselected chips use the normal text colour, not the muted one', nmChips(W).every(function (b) { return W.getComputedStyle(b).color === W.getComputedStyle(lab0).color; }),
+      nmChips(W).map(function (b) { return W.getComputedStyle(b).color; }).join(' ') + ' vs ' + W.getComputedStyle(lab0).color);
+    eq('naming: its Title has a visible label', d.querySelector('#sheet [data-field="title"] .sh-flab').textContent, 'Title');
+    eq('naming: its Date is the day after the selected task (placement().from)', field(W, 'date').value, '2026-10-15');
+    eq('naming: chips on a chart with groups: No group, then each group', nmChips(W).map(function (b) { return b.textContent; }).join(','), 'No group,Discovery,Build');
+    eq('naming: ... the selected task\'s group is the default', nmChips(W).filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).map(function (b) { return b.textContent; }).join(), 'Discovery');
+    ok('naming: ... each chip shows its whole name in a 44 px target', nmChips(W).every(function (b) { return b.scrollWidth <= b.clientWidth + 1 && b.getBoundingClientRect().height >= 44; }));
+    eq('naming: its actions', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-actions button'), function (b) { return b.textContent; }).join(','), 'Create,Link to a note…,Cancel');
+    s.n0 = tasks().length; s.u0 = undoN(); s.c0 = commits; s.up0 = nmUps(W, 'chart-note');
+    return saved(W);
+  }).then(function () {
+    s.up0 = nmUps(W, 'chart-note');
+    var ti = field(W, 'title');
+    ti.value = 'Design review';
+    nmKey(W, ti, 'Enter');
+    var t = tasks()[2];
+    eq('naming: typing a title and Enter creates one task', tasks().length, s.n0 + 1);
+    eq('naming: ... at placement().index (right after the selected task)', t.title + '|' + tasks().indexOf(t), 'Design review|2');
+    ok('naming: ... a note-less milestone on that date, in that group', t.milestone && t.note === null && ymd(W, t.start) === '2026-10-15' && t.group === 'g1', JSON.stringify(t));
+    eq('naming: ... one commit', commits - s.c0, 1);
+    eq('naming: ... one undo entry', undoN() - s.u0, 1);
+    eq('naming: ... named after the milestone', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Add milestone “Design review”');
+    ok('naming: ... the sheet closed', !s.sheet.isOpen());
+    return saved(W);
+  }).then(function () {
+    eq('naming: ... one chart save', nmUps(W, 'chart-note') - s.up0, 1);
+    // An empty title and another chip.
+    openCreate('t2');
+    var build = nmChips(W).filter(function (b) { return b.getAttribute('data-value') === 'g2'; })[0];
+    build.click();
+    ok('naming: a chip tap checks it alone', build.getAttribute('aria-pressed') === 'true' && nmChips(W).filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; }).length === 1);
+    s.c0 = commits;
+    d.querySelector('#sheet [data-action="create"]').click();
+    mA = tasks()[2];
+    eq('naming: an empty title creates "Milestone"', mA.title, 'Milestone');
+    eq('naming: ... in the chosen group', mA.group, 'g2');
+    eq('naming: ... one commit', commits - s.c0, 1);
+    return saved(W);
+  }).then(function () {
+    // Link to a note… with a note already on the chart: refused, nothing committed.
+    openCreate('t2');
+    s.c0 = commits; s.n0 = tasks().length; s.pk0 = m.picks.length;
+    m.pickAnswer = [ids[0]];
+    d.querySelector('#sheet [data-action="link"]').click();
+    return waitFor(function () { return toastText(W) === 'Already on this chart'; }, 4000, 'the clash toast');
+  }).then(function () {
+    var pk = m.picks[m.picks.length - 1];
+    ok('naming: Link to a note… is one single-select pick', m.picks.length === s.pk0 + 1 && pk.multiSelect === false, JSON.stringify(pk));
+    eq('naming: a note already on the chart says "Already on this chart"', toastText(W), 'Already on this chart');
+    ok('naming: ... and commits nothing', commits === s.c0 && tasks().length === s.n0);
+    ok('naming: ... the create sheet stays, with no note', s.sheet.kind() === 'milestone' && !d.querySelector('#sheet [data-field="note"]'));
+    // A free note: the sheet shows it and the title is the note's.
+    m.put({ id: 'nm-free', title: 'Launch review', type: 'task' });
+    m.pickAnswer = ['nm-free'];
+    d.querySelector('#sheet [data-action="link"]').click();
+    return waitFor(function () { return !!d.querySelector('#sheet [data-field="note"]'); }, 4000, 'the picked note');
+  }).then(function () {
+    eq('naming: a picked note shows in the create sheet', d.querySelector('#sheet [data-field="note"] .sh-note').textContent, 'Launch review');
+    ok('naming: ... its title is the note\'s, not editable', field(W, 'title').value === 'Launch review' && field(W, 'title').disabled);
+    ok('naming: ... date and group kept', field(W, 'date').value === '2026-10-15' && nmChips(W).filter(function (b) { return b.getAttribute('aria-pressed') === 'true'; })[0].textContent === 'Discovery');
+    // Meanwhile the note reaches the chart another way: Create refuses it (G0 review 1).
+    A.commitEdit(W.GT.model.addTasks(s.session.live, [{ note: 'nm-free', title: 'Launch review' }], {}), 'Add notes', null);
+    W.document.getElementById('toast').hidden = true;
+    s.c0 = commits; s.n0 = tasks().length;
+    d.querySelector('#sheet [data-action="create"]').click();
+    eq('naming: Create refuses a note that reached the chart meanwhile', toastText(W), 'Already on this chart');
+    ok('naming: ... commits nothing and keeps the create sheet', commits === s.c0 && tasks().length === s.n0 && s.sheet.kind() === 'milestone');
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    ok('naming: (the other copy undone, the sheet still open)', !tasks().some(function (t) { return t.note === 'nm-free'; }) && s.sheet.kind() === 'milestone');
+    s.c0 = commits;
+    d.querySelector('#sheet [data-action="create"]').click();
+    mFresh = tasks()[2];
+    ok('naming: ... Create adds it with the note and the picker\'s title', mFresh.note === 'nm-free' && mFresh.title === 'Launch review' && mFresh.milestone, JSON.stringify(mFresh));
+    eq('naming: ... one commit', commits - s.c0, 1);
+    return saved(W);
+  }).then(function () {
+    ok('naming: ... the saved line carries the note\'s title', m.content('chart-note').indexOf('◆ [Launch review](synapseresource://note/nm-free?via=gantt)') >= 0);
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    // --- rename a note-less milestone: change, Enter and every close commit once.
+    A.select(mA.id);
+    A.openSheet(mA.id, 'peek');
+    var inp = nmName(W), lab = d.querySelector('#sheet label[for="sh-name-in"]');
+    eq('naming: the note-less milestone\'s sheet has a Title field', lab && lab.textContent, 'Title');
+    eq('naming: ... holding its title', inp.value, 'Milestone');
+    ok('naming: ... no hint, no Rename button', !inp.hasAttribute('aria-describedby') && nmBtn(W).hidden);
+    ok('naming: ... Link note… is offered, with the syncDates hint', vis(d.querySelector('#sheet [data-action="link-note"]')) && !d.querySelector('#sheet .sh-lhint').hidden && d.querySelector('#sheet .sh-lhint').textContent === 'Dates are written to the note the next time you move it');
+    ok('naming: a tap-opened sheet does not focus the field', d.activeElement !== inp);
+    s.c0 = commits; s.uT = undoN();
+    ['G', 'Go', 'Go/no-go'].forEach(function (v) { nmType(W, inp, v); });
+    eq('naming: no commit while typing', commits - s.c0, 0);
+    nmChange(W, inp);
+    eq('naming: change commits once', commits - s.c0 + '|' + M(W).title, '1|Go/no-go');
+    d.querySelector('#sheet .sh-close').click();
+    eq('naming: ... and the close after it adds none', commits - s.c0, 1);
+    function M(W) { return W.GT.model.task(s.session.live, mA.id); }
+    s.M = M;
+    A.openSheet(mA.id, 'peek');
+    inp = nmName(W);
+    inp.value = '  Go   /  no-go  2 ';
+    nmKey(W, inp, 'Enter');
+    eq('naming: Enter commits once, whitespace collapsed', commits - s.c0 + '|' + M(W).title, '2|Go / no-go 2');
+    nmChange(W, inp);
+    d.querySelector('#sheet .sh-close').click();
+    eq('naming: ... a change and a close after it add none', commits - s.c0, 2);
+    // Key 'title:<id>': two title commits within 800 ms are one undo entry.
+    eq('naming: two title commits within 800 ms are one undo entry', undoN() - s.uT, 1);
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    eq('naming: ... whose undo restores the title before the first', s.M(W).title, 'Milestone');
+    return A.redo().then(function () { return saved(W); });
+  }).then(function () {
+    eq('naming: ... and redo brings the last one back', s.M(W).title, 'Go / no-go 2');
+    var M = s.M;
+    s.c0 = commits - 2;
+    A.openSheet(mA.id, 'peek');
+    nmName(W).value = 'By the X';
+    d.querySelector('#sheet .sh-close').click();
+    eq('naming: close (X) commits once', commits - s.c0 + '|' + M(W).title, '3|By the X');
+    A.openSheet(mA.id, 'full');
+    nmName(W).value = 'By the scrim';
+    d.getElementById('scrim').click();
+    eq('naming: a scrim tap at FULL goes to PEEK and commits nothing yet', s.sheet.detent() + '|' + (commits - s.c0), 'peek|3');
+    d.getElementById('scrim').click();
+    eq('naming: close (scrim) commits once', commits - s.c0 + '|' + M(W).title + '|' + s.sheet.isOpen(), '4|By the scrim|false');
+    A.openSheet(mA.id, 'peek');
+    nmName(W).value = '';
+    d.querySelector('#sheet .sh-close').click();
+    eq('naming: an empty value is not committed', commits - s.c0 + '|' + M(W).title, '4|By the scrim');
+    // The last commit comes after the coalescing window, so it is its own undo entry.
+    return wait(900);
+  }).then(function () {
+    A.openSheet(mA.id, 'peek');
+    var g = d.querySelector('#sheet .sheet-grab'), gr = g.getBoundingClientRect();
+    nmName(W).value = 'By a swipe';
+    touch(W, g, 'pointerdown', 91, gr.left + 20, gr.top + 5);
+    touch(W, g, 'pointermove', 91, gr.left + 20, gr.top + 80);
+    touch(W, g, 'pointerup', 91, gr.left + 20, gr.top + 80);
+    eq('naming: close (swipe down) commits once', commits - s.c0 + '|' + s.M(W).title + '|' + s.sheet.isOpen(), '5|By a swipe|false');
+    // Escape restores without a commit.
+    A.openSheet(mA.id, 'peek');
+    var inp = nmName(W);
+    inp.focus();
+    inp.value = 'Not this';
+    nmKey(W, inp, 'Escape');
+    eq('naming: Escape restores the field', inp.value, 'By a swipe');
+    ok('naming: ... leaves it (focus on the sheet title) and keeps the sheet', d.activeElement !== inp && s.sheet.isOpen());
+    d.querySelector('#sheet .sh-close').click();
+    eq('naming: ... and commits nothing, not even on close', commits - s.c0 + '|' + s.M(W).title, '5|By a swipe');
+    return saved(W);
+  }).then(function () {
+    s.up0 = nmUps(W, 'chart-note');
+    eq('naming: Undo names the rename', d.getElementById('btnUndo').getAttribute('aria-label').split('“')[0], 'Undo: Rename ');
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    eq('naming: Undo restores the title', s.M(W).title, 'By the scrim');
+    eq('naming: ... with one save', nmUps(W, 'chart-note') - s.up0, 1);
+    ok('naming: ... saved in the JSON', W.GT.model.task(chartOfNote(W, 'chart-note'), mA.id).title === 'By the scrim');
+    // --- Link note… on it: clash first.
+    A.openSheet(mA.id, 'peek');
+    s.c0 = commits;
+    m.pickAnswer = [ids[1]];
+    d.querySelector('#sheet [data-action="link-note"]').click();
+    return waitFor(function () { return toastText(W) === 'Already on this chart'; }, 4000, 'the Link note clash toast');
+  }).then(function () {
+    ok('naming: Link note… with a note on the chart: toast, nothing committed', commits === s.c0 && s.M(W).note === null);
+    m.put({ id: 'nm-link', title: 'Go-live checklist', type: 'task', scheduledAt: '2026-01-05', completeBy: '2026-01-09' });
+    m.pickAnswer = ['nm-link'];
+    s.upAll = m.updates.length;
+    d.querySelector('#sheet [data-action="link-note"]').click();
+    return waitFor(function () { return s.M(W).note === 'nm-link'; }, 4000, 'the link');
+  }).then(function () {
+    eq('naming: Link note… is one commit', commits - s.c0, 1);
+    eq('naming: ... with the picker\'s title', s.M(W).title, 'Go-live checklist');
+    ok('naming: ... still a milestone on its date', s.M(W).milestone && ymd(W, s.M(W).start) === ymd(W, mA.start));
+    eq('naming: ... one undo entry', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Link note “By the scrim”');
+    return saved(W).then(function () { return waitFor(function () { return !!s.session.facts['nm-link']; }, 4000, 'the linked note facts'); });
+  }).then(function () {
+    ok('naming: ... the saved list line carries that title', m.content('chart-note').indexOf('◆ [Go-live checklist](synapseresource://note/nm-link?via=gantt)') >= 0);
+    var dated = [];
+    m.updates.slice(s.upAll).forEach(function (l) { l.forEach(function (x) { if (x.scheduledAt || x.completeBy) dated.push(x); }); });
+    eq('naming: ... no date entry in the updateNotes', dated.length, 0);
+    eq('naming: ... the note keeps its own dates', m.note('nm-link').scheduledAt + ' ' + m.note('nm-link').completeBy, '2026-01-05 2026-01-09');
+    var inp = nmName(W);
+    eq('naming: ... the Note title field appears', d.querySelector('#sheet label[for="sh-name-in"]').textContent + '|' + inp.value, 'Note title|Go-live checklist');
+    ok('naming: ... Link note… is gone', d.querySelector('#sheet [data-action="link-note"]').hidden);
+    d.querySelector('#sheet .sh-close').click();
+    // --- rename a noted task in approved auto mode.
+    st.launch.sessionApproved = true; m.sessionApproved = true;
+    eq('naming: the session is in auto mode', st.saveMode(), 'auto');
+    A.select('t3');
+    A.openSheet('t3', 'peek');
+    var inp2 = nmName(W), hint = d.getElementById('sh-name-hint');
+    eq('naming: a noted task\'s field is labelled Note title', d.querySelector('#sheet label[for="sh-name-in"]').textContent, 'Note title');
+    eq('naming: ... aria-describedby its hint', inp2.getAttribute('aria-describedby') + '|' + hint.textContent, 'sh-name-hint|Renames the note itself, everywhere it appears.');
+    ok('naming: ... no Rename button while it holds the note\'s title', nmBtn(W).hidden && inp2.value === 'Sync engine');
+    nmType(W, inp2, 'Sync engine v2');
+    ok('naming: [Rename] appears while the draft differs', !nmBtn(W).hidden && nmBtn(W).tagName === 'BUTTON' && nmBtn(W).textContent === 'Rename');
+    eq('naming: ... announced through the sheet\'s status line', d.querySelector('#sheet [data-field="name"] [role="status"]').textContent, 'Rename note');
+    nmType(W, inp2, 'Sync engine');
+    ok('naming: ... and goes when the draft equals the title again', nmBtn(W).hidden && d.querySelector('#sheet [data-field="name"] [role="status"]').textContent === '');
+    nmType(W, inp2, 'Sync engine v3');
+    s.upE = m.updates.length;
+    nmKey(W, inp2, 'Escape');
+    ok('naming: Escape in the Note title restores the note\'s title and hides [Rename]', inp2.value === 'Sync engine' && nmBtn(W).hidden);
+    ok('naming: ... and sends nothing', m.updates.length === s.upE);
+    s.upAll = m.updates.length;
+    nmType(W, inp2, 'Sync engine v2');
+    inp2.focus();
+    inp2.blur();
+    nmChange(W, inp2);
+    ok('naming: blur keeps the draft and sends nothing', inp2.value === 'Sync engine v2' && !nmBtn(W).hidden && m.updates.length === s.upAll);
+    d.querySelector('#sheet .sh-close').click();
+    A.openSheet('t3', 'peek');
+    ok('naming: close discards the draft and sends nothing', nmName(W).value === 'Sync engine' && m.updates.length === s.upAll);
+    return wait(50);
+  }).then(function () {
+    ok('naming: ... nothing sent after the close either', m.updates.length === s.upAll);
+    var inp = nmName(W);
+    s.u0 = undoN(); s.upAll = m.updates.length; s.c0 = commits; s.upC0 = nmUps(W, 'chart-note');
+    nmType(W, inp, 'Sync engine v2');
+    m.holdUpdateNotes();
+    nmKey(W, inp, 'Enter');
+    return waitFor(function () { return m.parked() === 1; }, 4000, 'the rename in flight').then(function () { return inp; });
+  }).then(function (inp) {
+    ok('naming: in flight the field is aria-busy and read-only, [Rename] disabled', inp.getAttribute('aria-busy') === 'true' && inp.readOnly && nmBtn(W).disabled);
+    nmKey(W, inp, 'Enter');
+    nmBtn(W).click();
+    // A relabel rebuilds the sheet mid-flight: the new field is busy too (G0 review 1).
+    m.emit('localechanged', 'zh-CN');
+    return wait(60);
+  }).then(function () {
+    var inp = nmName(W);
+    ok('naming: a sheet rebuilt during the flight is still aria-busy and read-only', inp.getAttribute('aria-busy') === 'true' && inp.readOnly && nmBtn(W).disabled && nmBtn(W).hidden);
+    nmKey(W, inp, 'Enter');
+    m.emit('localechanged', 'en-US');
+    return wait(60);
+  }).then(function () {
+    var inp = nmName(W);
+    ok('naming: ... after relabelling back as well', inp.getAttribute('aria-busy') === 'true' && inp.readOnly);
+    nmKey(W, inp, 'Enter');
+    return m.release().then(function () { return waitFor(function () { return !nmName(W).hasAttribute('aria-busy'); }, 4000, 'the rename to end'); }).then(function () { return nmName(W); });
+  }).then(function (inp) {
+    var te = nmTitleEntries(W, s.upAll);
+    eq('naming: Enter sends exactly one updateNotes with the title modification (a second Enter in flight sends nothing)', JSON.stringify(m.updates.slice(s.upAll)),
+      JSON.stringify([[{ id: ids[2], modification: { title: { new_title: 'Sync engine v2' } } }]]));
+    eq('naming: ... one title entry', te.length, 1);
+    eq('naming: ... and no chart write yet', nmUps(W, 'chart-note') - s.upC0, 0);
+    ok('naming: ... no chart write in the rename call', !m.updates.slice(s.upAll).some(function (l) { return l.some(function (x) { return x.id === 'chart-note'; }); }));
+    eq('naming: the facts are refreshed', s.session.facts[ids[2]].title, 'Sync engine v2');
+    eq('naming: the field keeps the new name and is editable again', inp.value + '|' + inp.readOnly + '|' + nmBtn(W).hidden, 'Sync engine v2|false|true');
+    eq('naming: one undo entry, the follow-up pushes none', undoN() - s.u0, 1);
+    eq('naming: ... named Rename note', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Rename note “Sync engine v2”');
+    eq('naming: the JSON title follows at once', W.GT.model.task(s.session.live, 't3').title, 'Sync engine v2');
+    eq('naming: the bar shows the new name', S(W).view.info('t3').title, 'Sync engine v2');
+    s.upChart = nmUps(W, 'chart-note');
+    return wait(1100).then(function () { return saved(W); });
+  }).then(function () {
+    eq('naming: then one debounced chart save', nmUps(W, 'chart-note') - s.upChart, 1);
+    ok('naming: ... with the new link text', m.content('chart-note').indexOf('[Sync engine v2](synapseresource://note/' + ids[2] + '?via=gantt)') >= 0);
+    eq('naming: ... and the JSON title', W.GT.model.task(chartOfNote(W, 'chart-note'), 't3').title, 'Sync engine v2');
+    s.upAll = m.updates.length;
+    return A.undo().then(function (r) { s.undoR = r; return wait(1100); }).then(function () { return saved(W); });
+  }).then(function () {
+    var te = nmTitleEntries(W, s.upAll);
+    ok('naming: Undo writes the old title back', s.undoR.ok && m.note(ids[2]).title === 'Sync engine');
+    eq('naming: ... in one call', JSON.stringify(m.updates[s.upAll]), JSON.stringify([{ id: ids[2], modification: { title: { new_title: 'Sync engine' } } }]));
+    eq('naming: ... one title entry', te.length, 1);
+    ok('naming: ... the chart\'s copy follows', W.GT.model.task(s.session.live, 't3').title === 'Sync engine' && m.content('chart-note').indexOf('[Sync engine](synapseresource://note/' + ids[2]) >= 0);
+    eq('naming: ... the open sheet shows it', nmName(W).value, 'Sync engine');
+    d.querySelector('#sheet .sh-close').click();
+    // --- manual mode: Enter sends one rename; the pill then shows unsaved changes.
+    st.launch.mode = 'manual'; A.syncUi();
+    A.select('t1');
+    A.openSheet('t1', 'peek');
+    s.upAll = m.updates.length;
+    var inp = nmName(W);
+    nmType(W, inp, 'Customer calls');
+    nmKey(W, inp, 'Enter');
+    return waitFor(function () { return !inp.hasAttribute('aria-busy') && m.note(ids[0]).title === 'Customer calls'; }, 4000, 'the manual rename');
+  }).then(function () {
+    return wait(1000);
+  }).then(function () {
+    eq('naming (manual): Enter sends one rename and nothing else', JSON.stringify(m.updates.slice(s.upAll)), JSON.stringify([[{ id: ids[0], modification: { title: { new_title: 'Customer calls' } } }]]));
+    eq('naming (manual): the pill then shows unsaved changes', d.getElementById('pill').textContent, 'Unsaved changes. Tap to save');
+    eq('naming (manual): ... the chart holds the new title', W.GT.model.task(s.session.live, 't1').title, 'Customer calls');
+    return A.tapPill();
+  }).then(function () {
+    return saved(W);
+  }).then(function () {
+    ok('naming (manual): the pill tap saves the new link text', m.content('chart-note').indexOf('[Customer calls](synapseresource://note/' + ids[0]) >= 0);
+    st.launch.mode = 'auto'; st.launch.sessionApproved = true; A.syncUi();
+    // --- a denial reverts the field and toasts.
+    m.sessionApproved = false;
+    m.approvals.push('deny');
+    W.document.getElementById('toast').hidden = true;
+    var inp = nmName(W);
+    nmType(W, inp, 'Denied name');
+    nmKey(W, inp, 'Enter');
+    return waitFor(function () { return !inp.hasAttribute('aria-busy') && toastText(W) !== ''; }, 4000, 'the denial').then(function () { return inp; });
+  }).then(function (inp) {
+    eq('naming: a denial toasts the not-approved text', toastText(W), 'The note was not renamed: not approved');
+    eq('naming: ... and reverts the field', inp.value + '|' + nmBtn(W).hidden, 'Customer calls|true');
+    eq('naming: ... the note is unchanged', m.note(ids[0]).title, 'Customer calls');
+    m.sessionApproved = true;
+    m.refuse(ids[0]);
+    W.document.getElementById('toast').hidden = true;
+    nmType(W, inp, 'Failed name');
+    nmKey(W, inp, 'Enter');
+    return waitFor(function () { return !inp.hasAttribute('aria-busy') && toastText(W) !== ''; }, 4000, 'the failure').then(function () { return inp; });
+  }).then(function (inp) {
+    eq('naming: a failure toasts the plain text', toastText(W), 'The note was not renamed');
+    eq('naming: ... and reverts the field', inp.value, 'Customer calls');
+    m.refuse(ids[0], false);
+    d.querySelector('#sheet .sh-close').click();
+    // --- keyboard: F2 from a focused row focuses the field.
+    S(W).view.focusRow('task', 't2');
+    nmKey(W, d.activeElement, 'F2');
+    eq('naming: F2 from a focused row opens its sheet', s.sheet.taskId(), 't2');
+    ok('naming: ... with the name field focused', d.activeElement === nmName(W));
+    nmKey(W, nmName(W), 'Escape');
+    d.querySelector('#sheet .sh-close').click();
+    flush(W);
+    var b = barAt(W, 't2');
+    tapEl(W, bar(W, 't2'), b.x, b.y);
+    eq('naming: a tap opens the sheet', s.sheet.taskId(), 't2');
+    ok('naming: ... without focusing the field', d.activeElement !== nmName(W));
+    // Focus on the sheet title (keyboard): F2 still reaches the field.
+    d.querySelector('#sheet .sh-title').focus();
+    nmKey(W, d.activeElement, 'F2');
+    ok('naming: F2 from the sheet title focuses the field', d.activeElement === nmName(W));
+    s.sheet.close();
+  });
+}
+
+function namingZh() {
+  var W, s, d, A, m;
+  return ready('nmzh').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock;
+    A.dismissNotice();
+    flush(W);
+    // G0 review 1 (main spec §14.1): in zh-CN a Latin group title keeps one line, never "Discover / y".
+    var dg = Array.prototype.filter.call(d.querySelectorAll('.g-grp .g-gt'), function (e) { return e.textContent === 'Discovery'; })[0];
+    ok('naming zh: a Latin group title is never split across lines', !!dg && W.getComputedStyle(dg).whiteSpace === 'nowrap' && dg.offsetHeight <= 18 && !/\btall\b/.test(dg.parentNode.className),
+      dg ? dg.offsetHeight + ' ' + W.getComputedStyle(dg).whiteSpace + ' ' + dg.parentNode.className : 'none');
+    A.select('t2');
+    d.getElementById('fab').click();
+    eq('naming zh: the FAB item', d.querySelector('#sheet [data-item="milestone"]').textContent, '添加里程碑');
+    d.querySelector('#sheet [data-item="milestone"]').click();
+    eq('naming zh: the create sheet title', d.getElementById('sheet-title').textContent, '新里程碑');
+    eq('naming zh: its labels', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-flab'), function (x) { return x.textContent; }).join(','), '标题,日期,分组');
+    eq('naming zh: the Title placeholder', field(W, 'title').placeholder, '里程碑');
+    eq('naming zh: the chips', nmChips(W).map(function (b) { return b.textContent; }).join(','), '无分组,Discovery,Build');
+    eq('naming zh: the actions', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-actions button'), function (b) { return b.textContent; }).join(','), '创建,关联笔记…,取消');
+    d.querySelector('#sheet [data-action="create"]').click();
+    var t = s.session.live.tasks[2];
+    eq('naming zh: an empty title creates "里程碑"', t.title, '里程碑');
+    A.openSheet(t.id, 'peek');
+    eq('naming zh: the Title label', d.querySelector('#sheet label[for="sh-name-in"]').textContent, '标题');
+    eq('naming zh: Link note…', d.querySelector('#sheet [data-action="link-note"]').textContent, '关联笔记…');
+    s.sheet.close();
+    A.openSheet('t1', 'peek');
+    eq('naming zh: the Note title label', d.querySelector('#sheet label[for="sh-name-in"]').textContent, '笔记标题');
+    eq('naming zh: the hint', d.getElementById('sh-name-hint').textContent, '会重命名笔记本身，所有出现的地方都会改变。');
+    nmType(W, nmName(W), '客户访谈');
+    eq('naming zh: [Rename]', nmBtn(W).textContent, '重命名');
+    eq('naming zh: its announcement', d.querySelector('#sheet [data-field="name"] [role="status"]').textContent, '重命名笔记');
+    // A live locale switch keeps the draft.
+    m.emit('localechanged', 'en-US');
+    return wait(60);
+  }).then(function () {
+    eq('naming zh: a locale switch relabels and keeps the draft', d.querySelector('#sheet label[for="sh-name-in"]').textContent + '|' + nmName(W).value + '|' + nmBtn(W).hidden, 'Note title|客户访谈|false');
+    s.sheet.close();
+  });
+}
+
+function namingEdges() {
+  var W, s, d, A;
+  return ready('nmng').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app;
+    A.dismissNotice();
+    d.getElementById('fab').click();
+    d.querySelector('#sheet [data-item="milestone"]').click();
+    ok('naming: on a chart without groups, no chips', s.sheet.kind() === 'milestone' && !d.querySelector('#sheet [data-field="group"]'));
+    eq('naming: ... the date is today with nothing selected', field(W, 'date').value, '2026-10-20');
+    field(W, 'title').value = 'Kickoff';
+    d.querySelector('#sheet [data-action="create"]').click();
+    var t = s.session.live.tasks[0];
+    ok('naming: ... created ungrouped at the end', s.session.live.tasks.length === 1 && t.title === 'Kickoff' && t.group === null && t.milestone);
+    // Opened from a hardware keyboard, the create sheet focuses its Title.
+    nmKey(W, d.body, 'Shift');
+    A.openFab();
+    d.querySelector('#sheet [data-item="milestone"]').click();
+    ok('naming: opened from the keyboard, the create sheet focuses the Title', d.activeElement === field(W, 'title'));
+    s.sheet.close();
+    d.body.dispatchEvent(new W.PointerEvent('pointerdown', { bubbles: true }));
+    A.openSheet(t.id, 'peek');
+    ok('naming: no syncDates hint on a chart without syncDates', d.querySelector('#sheet .sh-lhint').hidden && vis(d.querySelector('#sheet [data-action="link-note"]')));
+    s.sheet.close();
+    return ready('nmuns');
+  }).then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app;
+    A.dismissNotice();
+    A.openSheet('t3', 'peek');
+    var inp = nmName(W);
+    ok('naming: a missing note shows its Note title read-only', inp.readOnly && inp.value === 'Old research doc' && nmBtn(W).hidden);
+    ok('naming: ... without the rename hint', d.getElementById('sh-name-hint').hidden && !inp.hasAttribute('aria-describedby'));
+    nmType(W, inp, 'x');
+    ok('naming: ... no [Rename] for it', nmBtn(W).hidden);
+    s.sheet.close();
+  });
+}
+
+// G1 (task-groups plan §5, §5.6, §6.4): the delimited list through the app.
+function g1List() {
+  var W, s, A, d, m, B, c0;
+  function content() { return m.note('chart-note').content; }
+  function kind() { var b = d.getElementById('banner'); return b.hidden ? null : b.getAttribute('data-kind'); }
+  function btns() { return Array.prototype.map.call(d.querySelectorAll('#banner button'), function (b) { return b.textContent; }).join(','); }
+  function bind(w) { W = w; s = S(W); A = W.GT.app; d = W.document; m = W.GTDev.mock; B = W.GT.block; A.dismissNotice(); }
+  function after(t, needle) { var ls = t.split('\n'), i = ls.findIndex(function (l) { return l.indexOf(needle) >= 0; }); return i >= 0 ? ls[i + 1] : null; }
+  return ready('g1mig').then(function (w) {
+    bind(w);
+    c0 = content();
+    var fr0 = B.read(c0), n0 = ups(W);
+    eq('g1 migrate: a legacy chart opens with no banner and no write', kind() + ':' + (ups(W) - n0), 'null:0');
+    A.commitEdit(W.GT.model.moveTask(s.session.live, 't3', 1), 'Move', 't3');
+    return saved(W).then(function () {
+      var t = content();
+      eq('g1 migrate: the first save is one updateNotes', ups(W) - n0, 1);
+      eq('g1 migrate: ... the text above the old list is byte-identical', t.slice(0, fr0.region.start), c0.slice(0, fr0.region.start));
+      ok('g1 migrate: ... the list starts at ## Tasks with ### group headings', t.slice(fr0.region.start).indexOf('## Tasks\n\n') === 0 && /\n### Discovery\n- \[/.test(t) && t.indexOf('- **') < 0, t);
+      ok('g1 migrate: ... the block stores the heading', /"listHeading":"Tasks"/.test(t));
+      eq('g1 migrate: ... no banner after our own save', kind(), null);
+      var n1 = ups(W);
+      return A.tapPill().then(function () { eq('g1 migrate: the next save writes nothing', ups(W) - n1, 0); });
+    });
+  }).then(function () { return ready('g1att'); }).then(function (w) {
+    bind(w);
+    var nm = d.querySelector('.g-name[data-id="t3"]'), nr = nm.getBoundingClientRect(), n0 = ups(W);
+    // Sync engine (with "  - waiting on legal" under it) dragged up out of Build.
+    return dragBy(W, nm, nr.left + 30, nr.top + 20, 0, -110, { long: true, steps: 8 }).then(function () { return wait(0); }).then(function () {
+      ok('g1 attached: the drag moved Sync engine out of Build', task(W, 't3').group !== 'g2', String(task(W, 't3').group));
+      return saved(W);
+    }).then(function () {
+      var t = content();
+      eq('g1 attached: one save for the drag', ups(W) - n0, 1);
+      eq('g1 attached: the note line moved with its task', after(t, '[Sync engine]('), '  - waiting on legal');
+      eq('g1 attached: ... once', t.split('waiting on legal').length - 1, 1);
+      ok('g1 attached: the group\'s own line stayed under Build', t.indexOf('### Build\n  Scope: two sprints.\n') > 0, t);
+      return A.undo().then(function () { return saved(W); });
+    }).then(function () {
+      var t = content();
+      ok('g1 attached: Undo puts the task and its line back under Build', task(W, 't3').group === 'g2' && after(t, '[Sync engine](') === '  - waiting on legal' &&
+        t.indexOf('### Build\n  Scope: two sprints.\n- [Sync engine](') > 0, t);
+    });
+  }).then(function () { return ready('g1mh'); }).then(function (w) {
+    bind(w);
+    var n0 = ups(W), c1 = content();
+    eq('g1 missing: the banner', kind(), 'heading-missing');
+    eq('g1 missing: its text', d.querySelector('#banner .b-text').textContent, 'The “Tasks” heading above the task list is missing.');
+    eq('g1 missing: its buttons (no Use as for this list)', btns(), 'Restore heading,Turn list off');
+    m.emit('localechanged', 'zh-CN');
+    eq('g1 missing: in zh-CN', d.querySelector('#banner .b-text').textContent + '|' + btns(), '任务列表上方的“Tasks”标题不见了。|恢复标题,关闭列表');
+    m.emit('localechanged', 'en-US');
+    A.commitEdit(W.GT.model.setTask(s.session.live, 't1', { color: 'rose' }), 'Colour', 't1');
+    return wait(300).then(function () {
+      eq('g1 missing: an edit writes nothing', ups(W) - n0, 0);
+      eq('g1 missing: the pill says why', d.getElementById('pill').textContent + '|' + d.getElementById('pill').getAttribute('data-state'), 'Restore the task list heading to save|heading-missing');
+      m.emit('localechanged', 'zh-CN');
+      eq('g1 missing: ... in zh-CN', d.getElementById('pill').textContent, '恢复任务列表标题后才能保存');
+      m.emit('localechanged', 'en-US');
+      eq('g1 missing: the note is unchanged', content(), c1);
+      d.querySelector('#banner [data-action="restore-heading"]').click();
+      return waitFor(function () { return ups(W) - n0 >= 2 && !s.session.busy; }, 6000, 'Restore heading and the held save');
+    }).then(function () {
+      var t = content(), u = m.updates;
+      var first = u[u.length - 2];
+      var fc = first[0].modification.content;
+      ok('g1 restore: the first write is one replace_text inserting only the heading', first.length === 1 && fc.action === 'replace_text' &&
+        fc.new_text === fc.old_text.replace('- [Kickoff](', '## Tasks\n\n- [Kickoff](') && fc.new_text !== fc.old_text, JSON.stringify(first));
+      eq('g1 restore: then the held edit saved', ups(W) - n0, 2);
+      ok('g1 restore: one list heading, the edit in the block', t.split('\n## Tasks\n').length - 1 === 1 && /"color":"rose"/.test(t), t);
+      ok('g1 restore: the prose line is kept', t.indexOf('Next: hire a PM.') > 0);
+      eq('g1 restore: the banner is gone', kind(), null);
+    });
+  }).then(function () { return ready('g1ty'); }).then(function (w) {
+    bind(w);
+    eq('g1 typo: Use as is offered', btns(), 'Restore heading,Use “Taks” as the list heading,Turn list off');
+    var n0 = ups(W);
+    d.querySelector('#banner [data-action="use-heading"]').click();
+    return waitFor(function () { return s.session.live.settings.listHeading === 'Taks' && !s.session.busy && ups(W) > n0; }, 6000, 'Use as and its save').then(function () {
+      var t = content();
+      ok('g1 typo: the list stays under ## Taks and the block stores it', t.indexOf('Plan for the release.\n\n## Taks\n\n- [Kickoff](') === 0 && /"listHeading":"Taks"/.test(t), t);
+      eq('g1 typo: ... one list', t.split('[Kickoff](').length - 1, 1);
+      eq('g1 typo: one undo step, named', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Task list heading “list-missing-heading-typo”');
+      eq('g1 typo: the banner is gone', kind(), null);
+    });
+  }).then(function () { return ready('g1off'); }).then(function (w) {
+    bind(w);
+    var c1 = content(), n0 = ups(W);
+    d.querySelector('#banner [data-action="list-off"]').click();
+    return saved(W).then(function () { return waitFor(function () { return ups(W) > n0; }, 4000, 'the list-off save'); }).then(function () {
+      var t = content(), at = t.indexOf('```synapse-gantt');
+      eq('g1 list off: the lines above the block are kept as they were', t.slice(0, at), c1.slice(0, c1.indexOf('```synapse-gantt')));
+      ok('g1 list off: ... mirror false in the block, no banner', /"mirror":false/.test(t) && kind() === null);
+      eq('g1 list off: one undo step, named', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Turn list off “list-missing-heading-prose”');
+    });
+  });
+}
+
+/*
+ * G2 (task-groups plan §5.5, §10.2 `seed`): the request's example above a
+ * chart with no list heading (fence-only, legacy mirror, embed on top) and
+ * after a save: the banner, Use as groups (one commit, one save, the user's
+ * lines replaced by the list, Undo), Not now (no write; seedSkip rides the
+ * next commit), zh-CN.
+ */
+function seedFlow() {
+  var W, s, A, d, m;
+  function content() { return m.note('chart-note').content; }
+  function kind() { var b = d.getElementById('banner'); return b.hidden ? null : b.getAttribute('data-kind'); }
+  function text() { var t = d.querySelector('#banner .b-text'); return t ? t.textContent : ''; }
+  function btns() { return Array.prototype.map.call(d.querySelectorAll('#banner button'), function (b) { return b.textContent; }).join(','); }
+  function bind(w) { W = w; s = S(W); A = W.GT.app; d = W.document; m = W.GTDev.mock; A.dismissNotice(); }
+  function count(t, n) { return t.split(n).length - 1; }
+  function use(k, check) {
+    return ready(k).then(function (w) {
+      bind(w);
+      var c0 = content(), n0 = ups(W);
+      eq('seed ' + k + ': the banner', kind(), 'list-seed');
+      eq('seed ' + k + ': its text', text(), 'Use these headings as groups? The note lists 3 tasks in 2 groups above the chart.');
+      eq('seed ' + k + ': its buttons', btns(), 'Use as groups,Not now');
+      eq('seed ' + k + ': nothing written before the tap', ups(W) - n0, 0);
+      d.querySelector('#banner [data-action="seed-use"]').click();
+      return waitFor(function () { return ups(W) > n0 && !s.session.busy; }, 6000, 'Use as groups and its save').then(function () {
+        var t = content();
+        eq('seed ' + k + ': one save', ups(W) - n0, 1);
+        ok('seed ' + k + ': the user\'s headings and links are replaced by one list, the intro kept', t.indexOf('Project notes.\n\n## Tasks\n\n') === 0 &&
+          count(t, '\n## Design') === 0 && count(t, '## Tasks') === 1 && t.indexOf('### Design\n- [Wireframes](synapseresource://note/n-wire?via=gantt)') > 0 &&
+          t.indexOf('### Build\n- [API](synapseresource://note/n-api?via=gantt)') > 0 && count(t, 'note/n-kick') === 1, t);
+        eq('seed ' + k + ': the chart has the two groups', s.session.live.groups.map(function (g) { return g.title; }).join(), 'Design,Build');
+        eq('seed ' + k + ': the banner is gone', kind(), null);
+        eq('seed ' + k + ': one undo step, named', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Use as groups “' + k2t(k) + '”');
+        if (check) check(t, c0);
+      });
+    });
+  }
+  function k2t(k) { return { sdb: 'seed-basic', sdm: 'seed-basic-mirror', sde: 'seed-basic-embed', sda: 'seed-after-save' }[k]; }
+  return use('sdb').then(function () {
+    var n0 = ups(W);
+    return A.undo().then(function () { return saved(W); }).then(function () {
+      ok('seed sdb: Undo takes the groups and the added tasks back in one save', s.session.live.groups.length === 0 && s.session.live.tasks.length === 1 && ups(W) - n0 === 1);
+      // G2 review: the Undo also restores the seed text above the list.
+      var nt = W.GTDev.mock.note('chart-note').content;
+      ok('seed sdb: Undo restores the seed headings and links', nt.indexOf('Project notes.\n\n## Design\n[Wireframes](synapseresource://note/n-wire)\n[Style guide](synapseresource://note/n-style)\n\n## Build\n[API](synapseresource://note/n-api)\n\n## Tasks') === 0, nt);
+    });
+  }).then(function () {
+    return use('sdm', function (t) { ok('seed sdm: the old bullet list is gone', t.indexOf('- **') < 0 && count(t, '[Kickoff](') === 1, t); });
+  }).then(function () {
+    return use('sde', function (t) { ok('seed sde: the embed line is written once, under the list heading', count(t, '@[100% x 420](') === 1 && t.indexOf('## Tasks\n\n@[100% x 420](') > 0, t); });
+  }).then(function () {
+    return use('sda');
+  }).then(function () { return ready('sdn'); }).then(function (w) {
+    bind(w);
+    var n0 = ups(W), hash = W.GT.block.read(content(), { list: true }).seed.hash;
+    d.querySelector('#banner [data-action="seed-later"]').click();
+    eq('seed not now: the banner hides at once, nothing written', kind() + '|' + (ups(W) - n0), 'null|0');
+    eq('seed not now: kept in view state', S(W).listView.seedHidden, hash);
+    A.commitEdit(W.GT.model.setTask(s.session.live, 't0', { color: 'rose' }), 'Colour', 't0');
+    return saved(W).then(function () {
+      var t = content();
+      ok('seed not now: the next commit carries seedSkip in its one save', ups(W) - n0 === 1 && t.indexOf('"seedSkip":"' + hash + '"') > 0 && /"color":"rose"/.test(t), t);
+      return A.undo().then(function () { return saved(W); });
+    }).then(function () {
+      var t = content();
+      ok('seed not now: its undo clears seedSkip too', t.indexOf('seedSkip') < 0 && !/"color":"rose"/.test(t), t);
+      eq('seed not now: ... the view state still hides the offer', kind(), null);
+    });
+  }).then(function () { return ready('sdz'); }).then(function (w) {
+    bind(w);
+    eq('seed zh-CN: the banner text', text(), '把这些标题用作分组？笔记在图表上方的 2 个分组中列出了 3 个任务。');
+    eq('seed zh-CN: its buttons', btns(), '用作分组,暂不');
+  });
+}
+
+/*
+ * G2 (§10.2 `noteSync`): the mock edits the chart note, then a resume:
+ * a moved link (toast once, Undo note changes), a renamed heading, a
+ * deleted heading (banner, Restore list, Remove), a foreign link (Add,
+ * Not now), a copy inside (Listed more than once), a level-L heading
+ * (promote offer, Make groups, Undo). en and zh-CN.
+ */
+function noteSync() {
+  var W, s, A, d, m, I;
+  function content() { return m.note('chart-note').content; }
+  function kind() { var b = d.getElementById('banner'); return b.hidden ? null : b.getAttribute('data-kind'); }
+  function text() { var t = d.querySelector('#banner .b-text'); return t ? t.textContent : ''; }
+  function btns() { return Array.prototype.map.call(d.querySelectorAll('#banner button'), function (b) { return b.textContent; }).join(','); }
+  function toast() { var t = d.getElementById('toast'); return t.hidden ? null : { text: t.querySelector('span').textContent, btn: t.querySelector('button') }; }
+  function bind(w) { W = w; s = S(W); A = W.GT.app; d = W.document; m = W.GTDev.mock; I = W.GT.i18n; A.dismissNotice(); }
+  function lineOf(t, needle) { return t.split('\n').filter(function (l) { return l.indexOf(needle) >= 0; })[0]; }
+  function moveAfter(t, needle, anchor) {
+    var line = lineOf(t, needle), ls = t.split('\n').filter(function (l) { return l !== line; });
+    var i = ls.findIndex(function (l) { return l.indexOf(anchor) >= 0; });
+    ls.splice(i + 1, 0, line);
+    return ls.join('\n');
+  }
+  function insertAfter(t, anchor, line) {
+    var ls = t.split('\n'), i = ls.findIndex(function (l) { return l.indexOf(anchor) >= 0; });
+    ls.splice(i + 1, 0, line);
+    return ls.join('\n');
+  }
+  function edit(fn) {
+    d.getElementById('toast').hidden = true;
+    m.setNote('chart-note', fn(content()));
+    return m.resume().then(function () { return wait(120); }).then(function () { return saved(W); });
+  }
+  function zh(fn) { m.emit('localechanged', 'zh-CN'); var v = fn(); m.emit('localechanged', 'en-US'); return v; }
+  var n0;
+  return ready('ns').then(function (w) {
+    bind(w);
+    n0 = ups(W);
+    return edit(function (t) { return moveAfter(t, '[Sync engine](', '[Competitive teardown]('); });
+  }).then(function () {
+    var tt = toast();
+    eq('noteSync move: the chart shows the move', task(W, 't3').group, 'g1');
+    eq('noteSync move: the toast', tt && tt.text, 'Updated from the note: Sync engine → Discovery');
+    eq('noteSync move: ... with Undo', tt && tt.btn && tt.btn.textContent, 'Undo');
+    eq('noteSync move: no write, pill saved', (ups(W) - n0) + '|' + d.getElementById('pill').getAttribute('data-state'), '0|saved');
+    d.getElementById('toast').hidden = true;
+    return m.resume().then(function () { return wait(120); });
+  }).then(function () {
+    eq('noteSync move: a second resume shows no second toast', toast(), null);
+    return edit(function (t) { return moveAfter(t, '[Beta cut](', '[Kickoff]('); });
+  }).then(function () {
+    var tt = toast();
+    eq('noteSync move 2: the toast names only what the note changed', tt && tt.text, 'Updated from the note: Beta cut → No group, Sync engine → Discovery');
+    tt.btn.click();
+    return saved(W);
+  }).then(function () {
+    var t = content();
+    ok('noteSync Undo note changes: both back under Build in one save', ups(W) - n0 === 1 && task(W, 't3').group === 'g2' && task(W, 't4').group === 'g2' &&
+      // The prose that followed Beta cut in the note now follows the Build
+      // heading (the user moved Beta cut away from it), so it stays there.
+      /### Build\n\nRemember to book the launch room\.\n- \[Sync engine\]\([^\n]*\n- ◆ \[Beta cut\]/.test(t), t);
+    eq('noteSync Undo note changes: one undo step, named', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Undo note changes “list-basic”');
+    eq('noteSync Undo note changes: zh-CN label', zh(function () { return W.GT.i18n.text('Undo note changes'); }), '撤销笔记中的更改');
+    return edit(function (t) { return t.replace('### Build\n', '### Construction\n'); });
+  }).then(function () {
+    var tt = toast();
+    eq('noteSync rename: the group is renamed', W.GT.model.group(s.session.live, 'g2').title, 'Construction');
+    eq('noteSync rename: the toast', tt && tt.text, 'Updated from the note: Build renamed to Construction');
+    eq('noteSync rename: zh-CN text', zh(function () {
+      return A.foldText({ moved: [{ id: 't3', from: 'g2', to: 'g1' }], renamed: [{ id: 'g2', from: 'Build', to: 'Construction' }], added: [{ id: 'g3', title: 'Launch' }], groupsReordered: true, tasksReordered: false });
+    }), '已根据笔记更新：Sync engine → Discovery，“Build”已改名为“Construction”，新分组“Launch” 等 1 项');
+    // The rename is not saved (no edit since), so deleting the marker leaves
+    // the block's title: the banner names Build.
+    return edit(function (t) { return t.replace('### Construction\n', ''); });
+  }).then(function () {
+    eq('noteSync delete heading: the removal banner', kind(), 'mirror-gone');
+    eq('noteSync delete heading: its text', text(), 'Removed in the note: Build (group). Remove from chart?');
+    eq('noteSync delete heading: its buttons', btns(), 'Remove,Restore list');
+    eq('noteSync delete heading: zh-CN', zh(function () { return text() + '|' + btns(); }), '笔记中已删除：Build（分组）。要从图表中移除吗？|移除,恢复任务列表');
+    ok('noteSync delete heading: the group is kept and its tasks held', task(W, 't3').group === 'g2' && task(W, 't4').group === 'g2');
+    var n1 = ups(W);
+    d.querySelector('#banner [data-action="restore-list"]').click();
+    return waitFor(function () { return ups(W) > n1 && !s.session.busy; }, 6000, 'Restore list').then(function () {
+      ok('noteSync Restore list: the heading is back, the banner gone', content().indexOf('### Build\n- [Sync engine](') > 0 && kind() === null, content());
+    });
+  }).then(function () {
+    return edit(function (t) { return t.replace('### Build\n', ''); });
+  }).then(function () {
+    var n1 = ups(W);
+    d.querySelector('#banner [data-action="remove-gone"]').click();
+    return saved(W).then(function () {
+      var t = content();
+      ok('noteSync Remove: one save, the group gone, its tasks under Discovery in note order', ups(W) - n1 === 1 && !W.GT.model.group(s.session.live, 'g2') &&
+        task(W, 't3').group === 'g1' && t.indexOf('### Build') < 0 && kind() === null, t);
+      eq('noteSync Remove: the toast', toast() && toast().text, 'Removed “Build (group)” from the chart');
+    });
+  }).then(function () {
+    m.put({ id: 'n-vendor', title: 'Vendor contract', type: 'task', content: 'Terms.' });
+    m.put({ id: 'n-legal', title: 'Legal review', type: 'task', content: 'Terms.' });
+    return edit(function (t) { return insertAfter(t, '[Customer interviews](', '[Vendor contract](synapseresource://note/n-vendor)'); });
+  }).then(function () {
+    eq('noteSync foreign: the Added banner', kind() + '|' + text(), 'list-added|Added in the note: Vendor contract. Add to chart?');
+    eq('noteSync foreign: its buttons', btns(), 'Add,Not now');
+    eq('noteSync foreign: zh-CN', zh(function () { return text() + '|' + btns(); }), '笔记中新增了：Vendor contract。要加入图表吗？|添加,暂不');
+    var n1 = ups(W);
+    d.querySelector('#banner [data-action="offer-add"]').click();
+    return waitFor(function () { return ups(W) > n1 && !s.session.busy; }, 6000, 'Add and its save').then(function () {
+      var t = content(), c = s.session.live, v = c.tasks.filter(function (x) { return x.note === 'n-vendor'; })[0];
+      ok('noteSync Add: the task is in Discovery after Customer interviews, one save', !!v && v.group === 'g1' && ups(W) - n1 === 1 &&
+        c.tasks.indexOf(v) === c.tasks.indexOf(task(W, 't1')) + 1, JSON.stringify(c.tasks.map(function (x) { return x.title; })));
+      ok('noteSync Add: the line is MARKED once', t.split('note/n-vendor').length - 1 === 1 && t.indexOf('[Vendor contract](synapseresource://note/n-vendor?via=gantt)') > 0, t);
+      eq('noteSync Add: undo step', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Add notes “Vendor contract”');
+    });
+  }).then(function () {
+    return edit(function (t) { return insertAfter(t, '[Kickoff](', '[Legal review](synapseresource://note/n-legal)'); });
+  }).then(function () {
+    var n1 = ups(W);
+    d.querySelector('#banner [data-action="offer-later"]').click();
+    eq('noteSync Not now: the banner hides, nothing written', kind() + '|' + (ups(W) - n1), 'null|0');
+    return edit(function (t) { return insertAfter(t.split('\n').filter(function (l) { return l.indexOf('n-legal') < 0; }).join('\n'), '### Launch', lineOf(t, '[Customer interviews](')); });
+  }).then(function () {
+    eq('noteSync copy inside: Listed more than once', kind() + '|' + text(), 'list-twice|Listed more than once in the note: Customer interviews. Delete one copy to let the chart update it.');
+    eq('noteSync copy inside: zh-CN', zh(function () { return text(); }), '笔记中重复列出了：Customer interviews。删除其中一处后图表才会更新它。');
+    ok('noteSync copy inside: the task keeps its group', task(W, 't1').group === 'g1');
+    d.querySelector('#banner [data-action="twice-ok"]').click();
+    eq('noteSync copy inside: Got it hides it', kind(), null);
+    return edit(function (t) { var ls = t.split('\n'), i = ls.lastIndexOf(lineOf(t, '[Customer interviews](')); ls.splice(i, 1); return ls.join('\n'); });
+  }).then(function () {
+    return edit(function (t) { return t.replace('## Tasks\n\n', '## Tasks\n\n## Group 1\n'); });
+  }).then(function () {
+    eq('noteSync promote: the offer', kind() + '|' + text() + '|' + btns(), 'list-promote|Make “Group 1” a group?|Make groups,Not now');
+    eq('noteSync promote: zh-CN', zh(function () { return text() + '|' + btns(); }), '把“Group 1”设为分组？|设为分组,暂不');
+    var n1 = ups(W);
+    d.querySelector('#banner [data-action="promote-make"]').click();
+    return saved(W).then(function () {
+      var t = content();
+      ok('noteSync Make groups: one save, ### Group 1 in place of ## Group 1, Kickoff in it', ups(W) - n1 === 1 && t.indexOf('## Tasks\n\n### Group 1\n- [Kickoff](') > 0 &&
+        t.indexOf('\n## Group 1\n') < 0, t);
+      eq('noteSync Make groups: undo step', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Make groups “list-basic”');
+      return A.undo().then(function () { return saved(W); });
+    }).then(function () {
+      var t = content();
+      ok('noteSync Make groups: Undo restores the ## line and the chart', t.indexOf('## Tasks\n\n## Group 1\n\n- [Kickoff](') > 0 && s.session.live.groups.every(function (g) { return g.title !== 'Group 1'; }), t);
+    });
+  }).then(function () { return ready('nsopen'); }).then(function (w) {
+    bind(w);
+    eq('noteSync open: a note edited while the chart was closed showed the toast at open', S(W).foldShown, 'Updated from the note: Beta cut → QA, New group QA');
+    eq('noteSync open: ... with no write', ups(W), 0);
+    eq('noteSync open: ... offering Undo (shown once the journal check let the chart be edited)', S(W).foldUndo, true);
+  });
+}
+
+/* ------------------------------------------ G3: chart UX for groups (§8) */
+
+function hdr(W, gid) { return W.document.querySelector('.g-grp[data-group="' + gid + '"]:not([style*="display: none"])'); }
+function toastOf(W) { var t = W.document.getElementById('toast'); return t.hidden ? null : { text: t.querySelector('span').textContent, btn: t.querySelector('button') }; }
+function keyOn(W, el, key, o) {
+  o = o || {};
+  var e = new W.KeyboardEvent('keydown', { key: key, altKey: !!o.alt, shiftKey: !!o.shift, bubbles: true, cancelable: true });
+  (el || W.document.body).dispatchEvent(e);
+  return e;
+}
+function typeIn(W, input, v, ev) { input.value = v; input.dispatchEvent(new W.Event(ev || 'change', { bubbles: true })); }
+/*
+ * A REORDER drag of task `id` from its name row, held with the dragged
+ * centre in the middle of the zone whose target passes want(tg); resolves
+ * {pid, x, y, g, tg, rows} (release with release()). The pointer math is the
+ * app's own: dy = (y - drag.y0) + (cam.sy - drag.sy0).
+ */
+function reorderHold(W, id, want) {
+  var s = S(W), d = W.document, g = d.getElementById('gantt');
+  var el = d.querySelector('.g-name[data-id="' + id + '"]:not([style*="display: none"])'), r = el.getBoundingClientRect();
+  var x = r.left + 30, y = r.top + r.height / 2;
+  return dragBy(W, el, x, y, 0, 14, { long: true, steps: 2, noUp: true }).then(function (pid) {
+    var dr = s.drag;
+    if (!dr || dr.state !== 'REORDER') throw new Error('no REORDER drag for ' + id + ' (' + s.gestures.state() + ')');
+    var rows = s.view.rows(), c = s.session.live, cam = s.view.camera(), hit = [], last = rows[rows.length - 1];
+    for (var yy = 0; yy < last.y + last.h + 60; yy++) { var tg = W.GT.layout.reorderTarget(rows, c, id, yy); if (tg && want(tg)) hit.push(yy); }
+    if (!hit.length) throw new Error('no zone for ' + id);
+    var yc = hit[Math.floor(hit.length / 2)];
+    var py = yc - dr.mid + dr.y0 - (cam.sy - dr.sy0);
+    touch(W, g, 'pointermove', pid, x, py);
+    return wait(40).then(function () { flush(W); return { pid: pid, x: x, y: py, g: g, tg: s.drag && s.drag.target, rows: rows }; });
+  });
+}
+function release(W, h, cancel) { touch(W, h.g, cancel ? 'pointercancel' : 'pointerup', h.pid, h.x, h.y); return wait(0).then(function () { flush(W); }); }
+function longPressEl(W, el) {
+  var r = el.getBoundingClientRect(), id = ++PID, x = r.left + 30, y = r.top + r.height / 2;
+  touch(W, el, 'pointerdown', id, x, y);
+  return wait(560).then(function () { touch(W, W.document.getElementById('gantt'), 'pointerup', id, x, y); return wait(20); });
+}
+
+function groupDrag() {
+  var W, s, d, A, m;
+  function bind(w) { W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; A.dismissNotice(); }
+  function content() { return m.note('chart-note').content; }
+  return ready('gd').then(function (w) {
+    bind(w);
+    var n0 = ups(W), u0 = s.stack.size().undo, sy0 = s.view.camera().sy;
+    // An expanded group: dropped under its header, first in it (M6 rule).
+    return reorderHold(W, 't1', function (tg) { return tg.changed && tg.group === 'g2' && !tg.into; }).then(function (h) {
+      var sl = d.querySelector('.g-slot');
+      ok('groupDrag: the No-group slot row shows while dragging (no ungrouped task)', vis(sl) && sl.textContent === 'No group');
+      ok('groupDrag: an expanded header with rows is no band target', !d.querySelector('.g-grp.drop'));
+      eq('groupDrag: the bubble names the group', d.querySelector('.g-bubble').textContent, '→ Build');
+      return release(W, h);
+    }).then(function () {
+      eq('groupDrag expanded: t1 moved into Build', task(W, 't1').group, 'g2');
+      eq('groupDrag expanded: one save started at pointerup', ups(W) - n0, 1);
+      eq('groupDrag expanded: one undo entry', s.stack.size().undo - u0, 1);
+      ok('groupDrag expanded: the slot row is gone', !vis(d.querySelector('.g-slot')));
+      eq('groupDrag expanded: the camera is back where it was', s.view.camera().sy, sy0);
+      eq('groupDrag expanded: no toast (the row is on screen)', toastOf(W), null);
+      return saved(W);
+    }).then(function () {
+      var t = content();
+      ok('groupDrag: the written region is the delimited form', /\n## Tasks\n/.test(t) && /\n### Build\n[^#]*- \[Customer interviews\][^#]*```synapse-gantt/.test(t) && t.indexOf('- **Build**') < 0, t);
+      return A.undo().then(function () { return saved(W); });
+    }).then(function () {
+      eq('groupDrag: undo puts t1 back', task(W, 't1').group, 'g1');
+      // A collapsed group: its header band.
+      A.toggleGroup('g2');
+      flush(W);
+      var n1 = ups(W), u1 = s.stack.size().undo;
+      return reorderHold(W, 't1', function (tg) { return tg.changed && tg.into === 'g2'; }).then(function (h) {
+        var H = hdr(W, 'g2');
+        ok('groupDrag collapsed: the header is the drop target (.drop)', H.classList.contains('drop'));
+        eq('groupDrag collapsed: its count previews n+1', H.querySelector('.g-gn').textContent, '3');
+        ok('groupDrag collapsed: the target shows --h-fill (its hue)', !!W.getComputedStyle(H).getPropertyValue('--h-fill').trim());
+        eq('groupDrag collapsed: the bubble', d.querySelector('.g-bubble').textContent, '→ Build');
+        ok('groupDrag collapsed: the target is out of sight', h.tg.hidden === true);
+        return release(W, h);
+      }).then(function () {
+        var H = hdr(W, 'g2'), tt = toastOf(W);
+        eq('groupDrag collapsed: t1 is in Build', task(W, 't1').group, 'g2');
+        ok('groupDrag collapsed: Build stays collapsed', s.collapsed.indexOf('g2') >= 0 && H.getAttribute('aria-expanded') === 'false');
+        ok('groupDrag collapsed: the header flashes', H.classList.contains('flash'));
+        ok('groupDrag collapsed: the drop highlight is gone', !H.classList.contains('drop') && H.querySelector('.g-gn').textContent === '3');
+        eq('groupDrag collapsed: toast Moved to Build', tt && tt.text, 'Moved to Build');
+        eq('groupDrag collapsed: with Undo', tt && tt.btn && tt.btn.textContent, 'Undo');
+        // G2 review: the toast sits above the legend (never over it) and beside the FAB.
+        var lg = d.getElementById('legend'), tr = d.getElementById('toast').getBoundingClientRect(), fb = d.getElementById('fab').getBoundingClientRect();
+        ok('toast: the legend shows here (the check below means something)', !lg.hidden);
+        ok('toast: above the legend, not over it', tr.bottom <= lg.getBoundingClientRect().top + 0.5 && tr.height > 0, JSON.stringify([tr.top, tr.bottom, lg.getBoundingClientRect().top]));
+        ok('toast: clear of the FAB', tr.right <= fb.left + 0.5, tr.right + ' / ' + fb.left);
+        eq('groupDrag collapsed: one save, one undo entry', (ups(W) - n1) + ',' + (s.stack.size().undo - u1), '1,1');
+        return saved(W).then(function () { tt.btn.click(); return wait(0); }).then(function () { return saved(W); });
+      });
+    }).then(function () {
+      eq('groupDrag collapsed: the toast Undo puts it back', task(W, 't1').group, 'g1');
+      A.toggleGroup('g2');
+      flush(W);
+      // The No-group slot: at the top of the list the rows slide down by h.
+      var n2 = ups(W), top0 = hdr(W, 'g1').style.transform;
+      return reorderHold(W, 't3', function (tg) { return tg.changed && tg.slot; }).then(function (h) {
+        var sl = d.querySelector('.g-slot'), rows = s.view.rows();
+        ok('groupDrag slot: the slot is the target (.drop)', sl.classList.contains('drop'));
+        eq('groupDrag slot: the slot row is a task row tall', rows[0].kind + ':' + rows[0].h, 'slot:44');
+        eq('groupDrag slot: its label', sl.querySelector('.g-st').textContent, 'No group');
+        ok('groupDrag slot: the first header slid down by one row', hdr(W, 'g1').style.transform !== top0);
+        eq('groupDrag slot: the bubble', d.querySelector('.g-bubble').textContent, '→ No group');
+        // Reduced motion (§8.1, §10.2 a11y): the slot's slide takes zero time.
+        function dur(x) { return parseFloat(W.getComputedStyle(x).transitionDuration) || 0; }
+        var normal = dur(sl);
+        d.documentElement.classList.add('reduce-motion');
+        ok('groupDrag slot: reduced motion slides it in zero time (else --dur-fast)', sl.classList.contains('g-shift') && normal > 0 && dur(sl) === 0, normal + ',' + dur(sl));
+        d.documentElement.classList.remove('reduce-motion');
+        return release(W, h);
+      }).then(function () {
+        eq('groupDrag slot: t3 is ungrouped', task(W, 't3').group, null);
+        eq('groupDrag slot: one save', ups(W) - n2, 1);
+        eq('groupDrag slot: the camera is at the top again', s.view.camera().sy, 0);
+        return saved(W).then(function () { return A.undo(); }).then(function () { return saved(W); });
+      });
+    }).then(function () {
+      eq('groupDrag slot: undo', task(W, 't3').group, 'g2');
+      // Cancel (the system takes the pointer): nothing changes, the slot goes.
+      var n3 = ups(W), u3 = s.stack.size().undo;
+      return reorderHold(W, 't1', function (tg) { return tg.changed && tg.slot; }).then(function (h) { return release(W, h, true); }).then(function () {
+        eq('groupDrag cancel: nothing committed', (ups(W) - n3) + ',' + (s.stack.size().undo - u3) + ',' + task(W, 't1').group, '0,0,g1');
+        ok('groupDrag cancel: the slot and the preview are gone', !vis(d.querySelector('.g-slot')) && !s.view.preview() && s.view.camera().sy === 0);
+      });
+    });
+  }).then(function () { return ready('gdl'); }).then(function (w) {
+    bind(w);
+    ok('groupDrag empty: the empty group reads "Drag tasks here"', hdr(W, 'g3').querySelector('.g-gh').textContent === 'Drag tasks here' && hdr(W, 'g3').classList.contains('empty'));
+    // Review round 1: a column under 180 px hides it in the header and draws it in the header's body strip.
+    flush(W);
+    var bh = s.view.bodyHints().filter(function (x) { return x.id === 'g3'; })[0], rw = s.view.rows().filter(function (r) { return r.id === 'g3'; })[0];
+    ok('groupDrag empty: narrow column (' + s.view.nameW() + ' px): the hint is drawn in the body strip at its left edge', s.view.nameW() < 180 && !!bh && bh.text === 'Drag tasks here' &&
+      bh.x === 8 && Math.abs(bh.y - (rw.y - s.view.camera().sy + rw.h / 2)) < 0.5, JSON.stringify(bh));
+    eq('groupDrag empty: ... and not in the header', W.getComputedStyle(hdr(W, 'g3').querySelector('.g-gh')).display, 'none');
+    A.setNameW(400, false);
+    flush(W);
+    // Review round 2: HINT_MIN 230, so even the widest portrait column (195 px) keeps it in the body, never cut in the header.
+    ok('groupDrag empty: the widest portrait column (' + s.view.nameW() + ' px) still draws it in the body, not cut in the header', s.view.nameW() === 195 &&
+      W.getComputedStyle(hdr(W, 'g3').querySelector('.g-gh')).display === 'none' && s.view.bodyHints().some(function (x) { return x.id === 'g3'; }));
+    A.setNameW(null, false);
+    flush(W);
+    var n0 = ups(W);
+    return reorderHold(W, 't1', function (tg) { return tg.changed && tg.into === 'g3'; }).then(function (h) {
+      ok('groupDrag empty: no slot row while an ungrouped task is scheduled', !vis(d.querySelector('.g-slot')));
+      ok('groupDrag empty: the empty header is the target, count 1', hdr(W, 'g3').classList.contains('drop') && hdr(W, 'g3').querySelector('.g-gn').textContent === '1');
+      return release(W, h);
+    }).then(function () {
+      eq('groupDrag empty: t1 is in Launch', task(W, 't1').group, 'g3');
+      eq('groupDrag empty: one save', ups(W) - n0, 1);
+      eq('groupDrag empty: the hint is gone', hdr(W, 'g3').querySelector('.g-gh').textContent, '');
+      eq('groupDrag empty: no toast (the group is expanded)', toastOf(W), null);
+      return saved(W);
+    }).then(function () {
+      ok('groupDrag empty: the list line moved under ### Launch', /\n### Launch\n- \[Customer interviews\]/.test(content()), content());
+    });
+  }).then(function () { return ready('gwl'); }).then(function (w) {
+    bind(w);
+    // Review round 2: a column of at least 230 px (landscape) shows the hint whole in the header, none in the body.
+    A.setNameW(300, false);
+    flush(W);
+    var gh = hdr(W, 'g3').querySelector('.g-gh');
+    ok('groupDrag wide (' + s.view.nameW() + ' px): the hint shows whole in the header, none in the body', s.view.nameW() >= 230 && W.getComputedStyle(gh).display !== 'none' &&
+      gh.scrollWidth <= gh.clientWidth && !s.view.bodyHints().length, gh.scrollWidth + '/' + gh.clientWidth);
+  }).then(function () { return ready('gdu'); }).then(function (w) {
+    bind(w);
+    // An unscheduled task onto a (collapsed) header band: its group changes,
+    // its row stays under Unscheduled.
+    A.toggleGroup('g1');
+    flush(W);
+    var n0 = ups(W), idx0 = s.session.live.tasks.map(function (t) { return t.id; }).indexOf('t5');
+    return reorderHold(W, 't5', function (tg) { return tg.changed && tg.into === 'g1'; }).then(function (h) {
+      ok('groupDrag unscheduled: the band is the target', hdr(W, 'g1').classList.contains('drop'));
+      return release(W, h);
+    }).then(function () {
+      var t = toastOf(W);
+      eq('groupDrag unscheduled: t5 joins Discovery', task(W, 't5').group, 'g1');
+      eq('groupDrag unscheduled: its place in tasks[] is kept', s.session.live.tasks.map(function (t) { return t.id; }).indexOf('t5'), idx0);
+      eq('groupDrag unscheduled: one save', ups(W) - n0, 1);
+      eq('groupDrag unscheduled: toast', t && t.text, 'Moved to Discovery');
+      ok('groupDrag unscheduled: the row stays under Unscheduled', s.view.rows().some(function (r) { return r.kind === 'task' && r.id === 't5'; }));
+      return saved(W);
+    }).then(function () {
+      // Out of its group into no group: its own words (review round 1). An
+      // unscheduled task leaves a group only through the No-group slot, which
+      // shows once no scheduled task is ungrouped.
+      A.commitEdit(W.GT.model.moveToGroup(s.session.live, 't1', 'g2'), 'Reorder', 't1');
+      return saved(W);
+    }).then(function () {
+      var n1 = ups(W);
+      return reorderHold(W, 't6', function (tg) { return tg.changed && tg.slot; }).then(function (h) { return release(W, h); }).then(function () {
+        var t = toastOf(W);
+        eq('groupDrag unscheduled: t6 leaves Build', task(W, 't6').group + '|' + (ups(W) - n1), 'null|1');
+        eq('groupDrag unscheduled: toast Removed from its group', t && t.text + '|' + t.btn.textContent, 'Removed from its group|Undo');
+        return saved(W);
+      });
+    }).then(function () {
+      // The Unscheduled header has no band and a long press there folds it.
+      return longPressEl(W, hdr(W, W.GT.layout.UNSCHED));
+    }).then(function () {
+      ok('groupDrag unscheduled: a long press on Unscheduled opens no sheet', !s.sheet.isOpen());
+    });
+  });
+}
+
+// §8.1: REORDER's edge autoscroll reaches both ends of a 300-row chart and
+// the target follows each step (no new mechanism).
+function groupScroll() {
+  var W, s, d, A;
+  function toEdge(id, bottom, want, settle) {
+    var el = d.querySelector('.g-name[data-id="' + id + '"]:not([style*="display: none"])'), r = el.getBoundingClientRect();
+    var x = r.left + 30, y = r.top + r.height / 2, g = d.getElementById('gantt');
+    var vs = s.view.viewSize(), top = W.innerHeight - vs.h + vs.metrics.hdrH, ey = bottom ? top + vs.bodyH - 6 : top + 6;
+    return dragBy(W, el, x, y, 0, bottom ? 14 : -14, { long: true, steps: 2, noUp: true }).then(function (pid) {
+      eq('groupScroll: REORDER from ' + id, s.gestures.state(), 'REORDER');
+      var seen = {};
+      touch(W, g, 'pointermove', pid, x, ey);
+      return waitFor(function () {
+        var tg = s.drag && s.drag.target;
+        if (tg && tg.group) seen[tg.group] = 1;
+        var rows = s.view.rows(), end = rows[rows.length - 1], sy = s.view.camera().sy, vs = s.view.viewSize();
+        var atEnd = bottom ? sy + vs.bodyH >= end.y + end.h - 1 : sy <= 0;
+        return tg && want(tg) && atEnd ? tg : null;
+      }, 60000, 'the autoscroll to reach the far end').catch(function (e) {
+        var rows = s.view.rows(), end = rows[rows.length - 1];
+        throw new Error(e.message + ': sy ' + s.view.camera().sy + ', bodyH ' + s.view.viewSize().bodyH + ', end ' + (end.y + end.h) + ', target ' + JSON.stringify(s.drag && s.drag.target) + ', state ' + s.gestures.state() + ', ey ' + ey);
+      }).then(function (tg) {
+        return wait(200).then(function () {
+          // settle: a last move out of the edge band, onto a row of that group.
+          var uy = ey + (settle || 0);
+          if (settle) touch(W, g, 'pointermove', pid, x, uy);
+          return wait(60).then(function () {
+            var last = s.drag && s.drag.target;
+            touch(W, g, 'pointerup', pid, x, uy);
+            return { tg: last, seen: Object.keys(seen).length };
+          });
+        });
+      });
+    });
+  }
+  return ready('gsc').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; A.dismissNotice();
+    eq('groupScroll: 300 tasks in 10 groups', s.view.rows().length, 310);
+    var n0 = ups(W);
+    return toEdge('t000', true, function (tg) { return tg.group === 'g9'; }).then(function (r) {
+      var vs = s.view.viewSize(), rows = s.view.rows(), end = rows[rows.length - 1];
+      ok('groupScroll down: the target followed every group on the way', r.seen >= 10, 'groups seen ' + r.seen);
+      ok('groupScroll down: the camera reached the end', s.view.camera().sy + vs.bodyH >= end.y + end.h - 1, s.view.camera().sy + ' / ' + (end.y + end.h));
+      return wait(20);
+    }).then(function () {
+      eq('groupScroll down: the first task is in the last group', task(W, 't000').group, 'g9');
+      eq('groupScroll down: one save', ups(W) - n0, 1);
+      return saved(W);
+    }).then(function () {
+      // The No-group slot sits above the first header, so the top edge
+      // reaches it first; the last move is onto the first group's rows.
+      return toEdge('t299', false, function (tg) { return tg.slot || tg.group === 'g0'; }, 90);
+    }).then(function (r) {
+      eq('groupScroll up: the target after the settle is the first group', r.tg && r.tg.group, 'g0');
+      eq('groupScroll up: the last task is in the first group', task(W, 't299').group, 'g0');
+      eq('groupScroll up: the camera reached the top', s.view.camera().sy, 0);
+    });
+  });
+}
+
+function groupSheet() {
+  var W, s, d, A, m, st;
+  function inp() { return d.querySelector('#sheet [data-field="gname"] input'); }
+  function act(a) { return d.querySelector('#sheet [data-action="' + a + '"]'); }
+  function content() { return m.note('chart-note').content; }
+  return ready('gsh').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; st = s.store; A.dismissNotice();
+    // A quick tap still folds.
+    tapEl(W, hdr(W, 'g1'), hdr(W, 'g1').getBoundingClientRect().left + 30, hdr(W, 'g1').getBoundingClientRect().top + 10);
+    ok('groupSheet: a tap on a header still folds it', s.collapsed.indexOf('g1') >= 0 && !s.sheet.isOpen());
+    A.toggleGroup('g1');
+    flush(W);
+    return longPressEl(W, hdr(W, 'g1'));
+  }).then(function () {
+    eq('groupSheet: a long press opens the group sheet', s.sheet.kind() + '|' + s.sheet.groupId(), 'group|g1');
+    ok('groupSheet: ... without folding', s.collapsed.indexOf('g1') < 0);
+    eq('groupSheet: its title', d.getElementById('sheet-title').textContent, 'Discovery');
+    eq('groupSheet: its controls', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-gacts .sh-btn'), function (b) { return b.textContent; }).join(','),
+      'Move up,Move down,Collapse,Delete group');
+    eq('groupSheet: colours are Auto plus the palette', d.querySelectorAll('#sheet .sh-gsw .sw').length, 12);
+    eq('groupSheet: Auto is checked (the task sheet\'s word, review round 1)', d.querySelector('#sheet .sh-gsw .sw[aria-checked="true"]').textContent, 'Auto');
+    ok('groupSheet: Move up is disabled on the first group', act('move-up').disabled && !act('move-down').disabled);
+    // Rename: change commits, an empty name is refused.
+    var n0 = ups(W);
+    typeIn(W, inp(), '  Research   phase ');
+    eq('groupSheet rename: committed on change, whitespace collapsed', W.GT.model.group(s.session.live, 'g1').title, 'Research phase');
+    eq('groupSheet rename: the sheet title follows', d.getElementById('sheet-title').textContent, 'Research phase');
+    eq('groupSheet rename: undo label', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Rename group “Research phase”');
+    typeIn(W, inp(), '   ');
+    eq('groupSheet rename: an empty name is refused', W.GT.model.group(s.session.live, 'g1').title + '|' + inp().value, 'Research phase|Research phase');
+    eq('groupSheet rename: ... and says why', d.querySelector('#sheet .sh-gerr').textContent, 'A group needs a name');
+    eq('groupSheet rename: ... announced', d.querySelector('#sheet .sh-gerr').getAttribute('role'), 'status');
+    // Enter commits too.
+    inp().value = 'Research';
+    keyOn(W, inp(), 'Enter');
+    eq('groupSheet rename: Enter commits', W.GT.model.group(s.session.live, 'g1').title, 'Research');
+    return waitFor(function () { return ups(W) > n0; }, 6000, 'the debounced save').then(function () { return saved(W); }).then(function () {
+      ok('groupSheet rename: saved as the marker (debounced save)', ups(W) > n0 && /\n### Research\n/.test(content()), content());
+    });
+  }).then(function () {
+    // Recolour.
+    d.querySelector('#sheet .sh-gsw .sw[data-color="rose"]').click();
+    flush(W);
+    eq('groupSheet colour: rose', W.GT.model.group(s.session.live, 'g1').color, 'rose');
+    eq('groupSheet colour: checked', d.querySelector('#sheet .sh-gsw .sw[aria-checked="true"]').getAttribute('data-color'), 'rose');
+    ok('groupSheet colour: the header dot follows', d.getElementById('sheet').querySelector('.sh-dot').classList.contains('c-rose') && hdr(W, 'g1').classList.contains('c-rose'));
+    d.querySelector('#sheet .sh-gsw .sw[data-color=""]').click();
+    eq('groupSheet colour: Automatic clears it', W.GT.model.group(s.session.live, 'g1').color, null);
+    // Move down, then up: one undo entry each (separate presses).
+    var u0 = s.stack.size().undo;
+    act('move-down').click();
+    eq('groupSheet move down', s.session.live.groups.map(function (g) { return g.id; }).join(','), 'g2,g1');
+    ok('groupSheet move down: now last', act('move-down').disabled && !act('move-up').disabled);
+    eq('groupSheet move down: one undo entry', s.stack.size().undo - u0, 1);
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    eq('groupSheet move: undo restores the order', s.session.live.groups.map(function (g) { return g.id; }).join(','), 'g1,g2');
+    // Collapse row (view state).
+    act('collapse').click();
+    ok('groupSheet collapse: the group folds', s.collapsed.indexOf('g1') >= 0);
+    eq('groupSheet collapse: the row reads Expand', act('collapse').textContent + '|' + act('collapse').getAttribute('aria-expanded'), 'Expand|false');
+    act('collapse').click();
+    // Delete: two taps.
+    var n1 = ups(W), del = act('delete-group');
+    del.click();
+    eq('groupSheet delete: the first tap arms', del.textContent + '|' + del.classList.contains('armed'), 'Tap again to delete the group|true');
+    ok('groupSheet delete: ... nothing deleted yet', !!W.GT.model.group(s.session.live, 'g1'));
+    A.toggleGroup('g1');
+    del.click();
+    var tt = toastOf(W);
+    ok('groupSheet delete: the second tap deletes', !W.GT.model.group(s.session.live, 'g1') && task(W, 't1').group === null && task(W, 't2').group === null);
+    ok('groupSheet delete: the sheet closes', !s.sheet.isOpen());
+    ok('groupSheet delete: its collapsed id is kept until the next open (review round 1)', s.collapsed.indexOf('g1') >= 0);
+    eq('groupSheet delete: toast', tt && tt.text, 'Deleted group “Research”. Its tasks are now ungrouped.');
+    eq('groupSheet delete: one save', ups(W) - n1, 1);
+    return saved(W).then(function () { tt.btn.click(); return wait(0); }).then(function () { return saved(W); });
+  }).then(function () {
+    ok('groupSheet delete: Undo brings the group and its tasks back', !!W.GT.model.group(s.session.live, 'g1') && task(W, 't1').group === 'g1' && task(W, 't2').group === 'g1');
+    flush(W);
+    eq('groupSheet delete: ... still collapsed, as it was (review round 1)', hdr(W, 'g1').getAttribute('aria-expanded'), 'false');
+    A.toggleGroup('g1');
+    flush(W);
+    // Armed state times out.
+    A.openGroupSheet('g2');
+    // Read-only: the name and the Collapse row only.
+    s.sheet.close();
+    var can = st.canEdit;
+    st.canEdit = function () { return false; };
+    A.syncUi();
+    return longPressEl(W, hdr(W, 'g2')).then(function () {
+      eq('groupSheet read-only: a long press opens the sheet', s.sheet.kind(), 'group');
+      ok('groupSheet read-only: the name is read-only', inp().readOnly);
+      ok('groupSheet read-only: no colour, move or delete rows', !vis(d.querySelector('#sheet .sh-gsw')) && !vis(act('move-up').parentNode) && !vis(act('delete-group')));
+      ok('groupSheet read-only: the Collapse row stays', vis(act('collapse')));
+      s.sheet.close();
+      st.canEdit = can;
+      A.syncUi();
+      // zh-CN labels, live.
+      A.openGroupSheet('g2');
+      m.emit('localechanged', 'zh-CN');
+      var zh = Array.prototype.map.call(d.querySelectorAll('#sheet .sh-gacts .sh-btn'), function (b) { return b.textContent; }).join(',') + '|' +
+        d.querySelector('#sheet [data-field="gname"] label').textContent + '|' + d.querySelector('#sheet .sh-gsw .sw.auto').textContent;
+      m.emit('localechanged', 'en-US');
+      eq('groupSheet zh-CN', zh, '上移,下移,折叠,删除分组|分组名称|自动');
+      eq('groupSheet: back in English after the switch', act('move-up').textContent, 'Move up');
+      s.sheet.close();
+    });
+  });
+}
+
+function groupAdd() {
+  var W, s, d, A, m;
+  function inp() { return d.querySelector('#sheet [data-field="gname"] input'); }
+  function act(a) { return d.querySelector('#sheet [data-action="' + a + '"]'); }
+  function content() { return m.note('chart-note').content; }
+  function ids() { return s.session.live.groups.map(function (g) { return g.id; }); }
+  function titles() { return s.session.live.groups.map(function (g) { return g.title; }).join(','); }
+  var q, ops;
+  return ready('gad').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; A.dismissNotice();
+    // FAB > Add group, with Sync engine (Build) selected.
+    A.select('t3');
+    A.openFab();
+    d.querySelector('#sheet [data-item="group"]').click();
+    eq('groupAdd FAB: the create sheet', s.sheet.kind() + '|' + d.getElementById('sheet-title').textContent, 'group-new|Add group');
+    eq('groupAdd FAB: an empty name, placeholder Group name', inp().value + '|' + inp().placeholder, '|Group name');
+    ok('groupAdd FAB: the name field has focus', d.activeElement === inp());
+    var n0 = ups(W);
+    act('create').click();
+    eq('groupAdd FAB: Create with no name is refused', s.sheet.kind() + '|' + d.querySelector('#sheet .sh-gerr').textContent + '|' + (ups(W) - n0), 'group-new|A group needs a name|0');
+    typeIn(W, inp(), 'Tasks', 'input');
+    ok('groupAdd FAB: a name equal to the list heading shows the hint', vis(d.getElementById('sh-gname-hint')) && inp().getAttribute('aria-describedby') === 'sh-gname-hint');
+    typeIn(W, inp(), 'QA', 'input');
+    ok('groupAdd FAB: ... and hides it again', !vis(d.getElementById('sh-gname-hint')));
+    keyOn(W, inp(), 'Enter');
+    flush(W);
+    q = ids()[2];
+    eq('groupAdd FAB: the group goes after the selected task\'s group', titles(), 'Discovery,Build,QA,Launch');
+    ok('groupAdd FAB: the sheet closes, the header flashes', !s.sheet.isOpen() && hdr(W, q).classList.contains('flash'));
+    eq('groupAdd FAB: undo label', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Add group “QA”');
+    return saved(W).then(function () {
+      ok('groupAdd FAB: one save with the marker in place', ups(W) - n0 === 1 && /### Build\n[\s\S]*\n### QA\n[\s\S]*### Launch/.test(content()), content());
+    });
+  }).then(function () {
+    // More > Groups.
+    A.select(null);
+    A.openMore();
+    d.querySelector('#sheet [data-item="groups"]').click();
+    eq('groupAdd Groups: the list', s.sheet.kind() + '|' + d.getElementById('sheet-title').textContent, 'groups|Groups');
+    eq('groupAdd Groups: one row per group with its count', Array.prototype.map.call(d.querySelectorAll('#sheet .sh-gli .sh-trow'), function (b) { return b.getAttribute('aria-label'); }).join(';'),
+      'Discovery, 2 tasks;Build, 2 tasks;QA, 0 tasks;Launch, 0 tasks');
+    var up0 = d.querySelector('#sheet .sh-gli[data-id="g1"] [data-dir="-1"]'), dn0 = d.querySelector('#sheet .sh-gli[data-id="g1"] [data-dir="1"]');
+    ok('groupAdd Groups: Up is disabled on the first row', up0.disabled && !dn0.disabled && up0.getAttribute('aria-label') === 'Move up');
+    dn0.click();
+    eq('groupAdd Groups: Down moves the group', titles(), 'Build,Discovery,QA,Launch');
+    eq('groupAdd Groups: the list stays open, focus on that arrow', s.sheet.kind() + '|' + d.activeElement.getAttribute('data-dir') + '|' + d.activeElement.closest('.sh-gli').getAttribute('data-id'), 'groups|1|g1');
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    A.openGroups();
+    A.select(null);
+    act('add-group').click();
+    eq('groupAdd Groups: Add group opens the create sheet', s.sheet.kind(), 'group-new');
+    typeIn(W, inp(), 'Ops', 'input');
+    act('create').click();
+    ops = ids()[ids().length - 1];
+    eq('groupAdd Groups: with nothing selected the group goes last', titles(), 'Discovery,Build,QA,Launch,Ops');
+    eq('groupAdd Groups: back in the list, the new row focused', s.sheet.kind() + '|' + (d.activeElement.getAttribute('data-id') || ''), 'groups|' + ops);
+    // A row opens its group sheet; closing it comes back to the list.
+    d.querySelector('#sheet .sh-gli[data-id="g2"] .sh-trow').click();
+    eq('groupAdd Groups: a row opens its group sheet', s.sheet.kind() + '|' + s.sheet.groupId(), 'group|g2');
+    s.sheet.close();
+    eq('groupAdd Groups: closing it returns to the list', s.sheet.kind(), 'groups');
+    s.sheet.close();
+    // The Down press above armed a debounced save: let it run first.
+    return waitFor(function () { return s.session.debounce === null && !s.session.busy; }, 6000, 'the debounced save');
+  }).then(function () {
+    // The task sheet's Group row.
+    A.select('t0');
+    A.openSheet('t0', 'full');
+    var rg = d.querySelector('#sheet .sh-gchips');
+    eq('groupAdd row: a radiogroup labelled Group', rg.getAttribute('role') + '|' + d.getElementById(rg.getAttribute('aria-labelledby')).textContent, 'radiogroup|Group');
+    eq('groupAdd row: No group and every group', Array.prototype.map.call(rg.querySelectorAll('[role="radio"]'), function (b) { return b.textContent; }).join(','), 'No group,Discovery,Build,QA,Launch,Ops');
+    eq('groupAdd row: exactly one checked, No group for Kickoff', Array.prototype.filter.call(rg.querySelectorAll('[role="radio"]'), function (b) { return b.getAttribute('aria-checked') === 'true'; }).map(function (b) { return b.textContent; }).join(','), 'No group');
+    var n0 = ups(W);
+    rg.querySelector('[data-group="g2"]').click();
+    eq('groupAdd row: a tap moves the task', task(W, 't0').group, 'g2');
+    eq('groupAdd row: ... with no debounce pending (a tap saves now)', s.session.debounce, null);
+    eq('groupAdd row: ... the sheet stays open, Build checked', s.sheet.taskId() + '|' + d.querySelector('#sheet .sh-gchips [aria-checked="true"]').textContent, 't0|Build');
+    return waitFor(function () { return ups(W) > n0; }, 3000, 'the save').then(function () { return saved(W); }).then(function () {
+      eq('groupAdd row: ... saved at once (no debounce)', ups(W) - n0, 1);
+    });
+  }).then(function () {
+    // New group…: create and move in one commit.
+    var u0 = s.stack.size().undo;
+    act('new-group').click();
+    eq('groupAdd New group…: the create sheet', s.sheet.kind(), 'group-new');
+    act('cancel').click();
+    eq('groupAdd New group…: Cancel returns to the task sheet', s.sheet.taskId(), 't0');
+    act('new-group').click();
+    typeIn(W, inp(), 'Legal', 'input');
+    act('create').click();
+    var lg = task(W, 't0').group, g = W.GT.model.group(s.session.live, lg);
+    eq('groupAdd New group…: the task is in the new group', g && g.title, 'Legal');
+    eq('groupAdd New group…: after the task\'s group', titles(), 'Discovery,Build,Legal,QA,Launch,Ops');
+    eq('groupAdd New group…: one undo entry', s.stack.size().undo - u0, 1);
+    eq('groupAdd New group…: its label', d.getElementById('btnUndo').getAttribute('aria-label'), 'Undo: Move to new group “Kickoff”');
+    eq('groupAdd New group…: back in the task sheet with Legal checked', s.sheet.taskId() + '|' + d.querySelector('#sheet .sh-gchips [aria-checked="true"]').textContent, 't0|Legal');
+    return A.undo().then(function () { return saved(W); });
+  }).then(function () {
+    eq('groupAdd New group…: one undo takes both back', task(W, 't0').group + '|' + titles(), 'g2|Discovery,Build,QA,Launch,Ops');
+    s.sheet.close();
+  });
+}
+
+function groupKeys() {
+  var W, s, d, A;
+  function order() { return s.session.live.groups.map(function (g) { return g.id; }).join(','); }
+  return ready('gky').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; A.dismissNotice();
+    s.view.focusRow('group', 'g1');
+    keyOn(W, d.activeElement, 'ArrowDown', { alt: true });
+    eq('groupKeys: Alt+Down on a header moves the group', order(), 'g2,g1');
+    eq('groupKeys: ... focus stays on it', d.activeElement.getAttribute('data-group'), 'g1');
+    keyOn(W, d.activeElement, 'ArrowUp', { alt: true });
+    eq('groupKeys: Alt+Up moves it back', order(), 'g1,g2');
+    eq('groupKeys: the two moves coalesce into one undo entry', s.stack.size().undo, 1);
+    keyOn(W, d.activeElement, 'Enter', { shift: true });
+    eq('groupKeys: Shift+Enter opens the group sheet', s.sheet.kind() + '|' + s.sheet.groupId(), 'group|g1');
+    ok('groupKeys: ... the group did not fold', s.collapsed.indexOf('g1') < 0);
+    ok('groupKeys: focus moved into the sheet', d.getElementById('sheet').contains(d.activeElement));
+    keyOn(W, d.activeElement, 'Escape');
+    ok('groupKeys: Escape closes it, focus back on the header', !s.sheet.isOpen() && d.activeElement.getAttribute('data-group') === 'g1');
+    keyOn(W, d.activeElement, 'F2');
+    eq('groupKeys: F2 opens it', s.sheet.groupId(), 'g1');
+    s.sheet.close();
+    keyOn(W, d.activeElement, 'Delete');
+    ok('groupKeys: Delete opens the sheet with Delete armed', s.sheet.groupId() === 'g1' && s.sheet.deleteArmed() &&
+      d.querySelector('#sheet [data-action="delete-group"]').textContent === 'Tap again to delete the group');
+    ok('groupKeys: ... nothing deleted yet', !!W.GT.model.group(s.session.live, 'g1'));
+    keyOn(W, d.activeElement, 'Delete');
+    ok('groupKeys: a second Delete deletes', !W.GT.model.group(s.session.live, 'g1') && !s.sheet.isOpen());
+    return saved(W).then(function () { return A.undo(); }).then(function () { return saved(W); });
+  }).then(function () {
+    ok('groupKeys: undo', !!W.GT.model.group(s.session.live, 'g1'));
+    // A focused task: Alt+Down into a collapsed group.
+    A.toggleGroup('g2');
+    A.select('t2');
+    s.view.focusRow('task', 't2');
+    keyOn(W, d.activeElement, 'ArrowDown', { alt: true });
+    var tt = toastOf(W);
+    eq('groupKeys: Alt+Down on the last task enters the collapsed group', task(W, 't2').group, 'g2');
+    eq('groupKeys: ... toast', tt && tt.text, 'Moved to Build');
+    eq('groupKeys: ... focus on the header it went into', d.activeElement.getAttribute('data-group'), 'g2');
+    return saved(W).then(function () { return A.undo(); }).then(function () { return saved(W); });
+  }).then(function () {
+    eq('groupKeys: undo', task(W, 't2').group, 'g1');
+    A.toggleGroup('g2');
+    // Review round 1: Alt+Up on a group's only task leaves the group (the
+    // neighbour-threshold math stopped on its own header's band).
+    A.commitEdit(W.GT.model.moveToGroup(s.session.live, 't2', 'g2'), 'Reorder', 't2');
+    flush(W);
+    A.select('t1');
+    s.view.focusRow('task', 't1');
+    keyOn(W, d.activeElement, 'ArrowUp', { alt: true });
+    eq('groupKeys: Alt+Up on the only task of a group takes it out', task(W, 't1').group, null);
+    ok('groupKeys: ... and keeps the focus on its row', d.activeElement.getAttribute('data-id') === 't1');
+    return saved(W).then(function () { return A.undo(); }).then(function () { return A.undo(); }).then(function () { return saved(W); });
+  }).then(function () {
+    eq('groupKeys: undo both', task(W, 't1').group + ',' + task(W, 't2').group, 'g1,g1');
+  });
+}
+
+function collapseFlow() {
+  var W, s, d, A;
+  function exp(gid) { return hdr(W, gid).getAttribute('aria-expanded'); }
+  return ready('gco').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; A.dismissNotice();
+    var H = hdr(W, 'g2'), r = H.getBoundingClientRect();
+    tapEl(W, H, r.left + 30, r.top + 10);
+    flush(W);
+    ok('collapse: a tap folds, the chevron turns (.collapsed)', s.collapsed.indexOf('g2') >= 0 && hdr(W, 'g2').classList.contains('collapsed') &&
+      W.getComputedStyle(hdr(W, 'g2').querySelector('.g-chev')).transform !== 'none');
+    eq('collapse: aria-expanded', exp('g2') + ',' + exp('g1'), 'false,true');
+    eq('collapse: the chevron is hidden from assistive technology', hdr(W, 'g2').querySelector('.g-chev').getAttribute('aria-hidden'), 'true');
+    var cv = W.getComputedStyle(hdr(W, 'g2').querySelector('.g-chev'));
+    eq('collapse: the chevron turns about its centre, glyph centred in a 14 px box (review round 1)', cv.textAlign + '|' + cv.width + '|' + cv.height + '|' + cv.transformOrigin, 'center|14px|14px|7px 7px');
+    eq('collapse: the header counts every member, the undated one named', hdr(W, 'g2').getAttribute('aria-label') + '|' + hdr(W, 'g2').querySelector('.g-gh').textContent,
+      'Build, 2 tasks, 1 unscheduled|1 unscheduled');
+    // A stale id of a group that is gone, stored with the view.
+    return wait(900).then(function () {
+      var v = s.store.cache.get('chart-note').view;
+      s.store.cache.setView('chart-note', Object.assign({}, v, { collapsed: v.collapsed.concat(['gone']) }));
+      A.goHome();
+      return A.openChart({ noteId: 'chart-note' });
+    });
+  }).then(function () {
+    return Promise.all([s.session.resolved, s.session.checked]).then(function () { return wait(60); });
+  }).then(function () {
+    flush(W);
+    eq('collapse: the folded group persists across close and reopen', exp('g2'), 'false');
+    eq('collapse: the id of a group that no longer exists is pruned', s.collapsed.join(','), 'g2');
+    A.openMore();
+    d.querySelector('#sheet [data-item="collapse"]').click();
+    flush(W);
+    eq('collapse: Collapse all', exp('g1') + ',' + exp('g2') + ',' + exp(W.GT.layout.UNSCHED), 'false,false,false');
+    A.openMore();
+    d.querySelector('#sheet [data-item="expand"]').click();
+    flush(W);
+    eq('collapse: Expand all', exp('g1') + ',' + exp('g2') + ',' + exp(W.GT.layout.UNSCHED), 'true,true,true');
+    eq('collapse: nothing folded', s.collapsed.length, 0);
+  });
+}
+
+// Chart settings: the task list heading and its level (§5.2.1, §5.7).
+function groupSettings() {
+  var W, s, d, A, m;
+  function content() { return m.note('chart-note').content; }
+  return ready('gst').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; A.dismissNotice();
+    A.openSettings();
+    var hi = d.querySelector('#sheet [data-field="listHeading"] input');
+    eq('groupSettings: the heading row', hi.value + '|' + d.querySelector('#sheet [data-field="listHeading"] .sh-flab').textContent, 'Tasks|Task list heading');
+    eq('groupSettings: the level row', d.querySelector('#sheet [data-field="listLevel"] [aria-pressed="true"]').textContent, '2');
+    var n0 = ups(W);
+    typeIn(W, hi, '   ');
+    eq('groupSettings: an empty heading is refused', s.session.live.settings.listHeading + '|' + hi.value, 'Tasks|Tasks');
+    typeIn(W, hi, 'Plan');
+    eq('groupSettings: a new heading commits', s.session.live.settings.listHeading, 'Plan');
+    var lcalls = [], slh0 = s.store.setListHeading;
+    s.store.setListHeading = function (o) { lcalls.push(JSON.stringify(o)); return slh0.apply(this, arguments); };
+    d.querySelector('#sheet [data-field="listLevel"] [data-value="3"]').click();
+    s.store.setListHeading = slh0;
+    eq('groupSettings: a new level commits', s.session.live.settings.listLevel, 3);
+    eq('groupSettings: ... through store.setListHeading (review round 2)', lcalls.join(' '), '{"level":3}');
+    return saved(W).then(function () { return wait(900); }).then(function () { return saved(W); });
+  }).then(function () {
+    var t = content();
+    ok('groupSettings: saved: ### Plan above #### group markers, the old heading gone', /\n### Plan\n/.test(t) && /\n#### Discovery\n/.test(t) && t.indexOf('## Tasks') < 0, t);
+    s.sheet.close();
+    return m.resume().then(function () { return wait(150); });
+  }).then(function () {
+    var ui = s.store.ui();
+    ok('groupSettings: the next read finds the list (no missing heading banner)', ui.banner !== 'heading-missing' && !ui.missing, JSON.stringify(ui));
+    return A.undo().then(function () { return saved(W); }).then(function () { return A.undo(); }).then(function () { return saved(W); });
+  }).then(function () {
+    ok('groupSettings: undo puts ## Tasks back', /\n## Tasks\n/.test(content()) && s.session.live.settings.listHeading === 'Tasks', content());
+    // Review round 1: the rows show only while the list is on.
+    A.openSettings();
+    var mi = d.querySelector('#sheet [data-field="mirror"] input');
+    function rows() { return vis(d.querySelector('#sheet [data-field="listHeading"]')) + ',' + vis(d.querySelector('#sheet [data-field="listLevel"]')); }
+    eq('groupSettings: heading rows shown with the list on', rows(), 'true,true');
+    // G4 audit: the switch reads "Task list above the chart" (§7.1, §9).
+    function mlab() { return d.querySelector('#sheet [data-field="mirror"] span').textContent; }
+    var mEn = mlab();
+    m.emit('localechanged', 'zh-CN');
+    var mZh = d.querySelector('#sheet [data-field="mirror"] span').textContent;
+    m.emit('localechanged', 'en-US');
+    eq('groupSettings: the list switch label, en and zh-CN', mEn + '|' + mZh, 'Task list above the chart|图表上方的任务列表');
+    mi = d.querySelector('#sheet [data-field="mirror"] input');
+    mi.checked = false; mi.dispatchEvent(new W.Event('change', { bubbles: true }));
+    eq('groupSettings: ... hidden when it is turned off', rows(), 'false,false');
+    mi.checked = true; mi.dispatchEvent(new W.Event('change', { bubbles: true }));
+    eq('groupSettings: ... shown again', rows(), 'true,true');
+    s.sheet.close();
+    return saved(W);
+  }).then(function () { return ready('gsm'); }).then(function (w) {
+    // Review round 1 (major): in manual mode, a resume before the save finds
+    // the note's own heading: no missing banner, one save when asked.
+    W = w; s = S(W); d = W.document; A = W.GT.app; m = W.GTDev.mock; A.dismissNotice();
+    s.store.launch.mode = 'manual'; s.store.launch.sessionApproved = false; A.syncUi();
+    var before = content(), n0 = ups(W), u0 = s.stack.size().undo;
+    // Review round 2: the rows must go through the store's heading path
+    // (setSettings plus a plain commit behaves the same in this flow).
+    var calls = [], slh = s.store.setListHeading;
+    s.store.setListHeading = function (o) { calls.push(JSON.stringify(o)); return slh.apply(this, arguments); };
+    A.openSettings();
+    var hi = d.querySelector('#sheet [data-field="listHeading"] input');
+    typeIn(W, hi, '');
+    eq('groupSettings manual: an empty heading is refused and said', s.session.live.settings.listHeading + '|' + hi.value + '|' + (toastOf(W) && toastOf(W).text), 'Tasks|Tasks|The task list needs a heading');
+    typeIn(W, hi, '  Plan  ');
+    s.sheet.close();
+    s.store.setListHeading = slh;
+    eq('groupSettings manual: the heading goes through store.setListHeading, text collapsed (the empty one never reaches it)', calls.join(' '), '{"heading":"Plan"}');
+    eq('groupSettings manual: committed, one undo entry, nothing written yet', s.session.live.settings.listHeading + '|' + (s.stack.size().undo - u0) + '|' + (ups(W) - n0), 'Plan|1|0');
+    return m.resume().then(function () { return wait(200); }).then(function () {
+      var ui = s.store.ui();
+      ok('groupSettings manual: the resume read finds the list (no missing heading)', ui.banner !== 'heading-missing' && !ui.missing && d.getElementById('banner').getAttribute('data-kind') !== 'heading-missing', JSON.stringify(ui));
+      eq('groupSettings manual: the pill says unsaved', d.getElementById('pill').getAttribute('data-state'), 'unsaved');
+      return A.tapPill();
+    }).then(function () { return saved(W); }).then(function () {
+      var after = content();
+      eq('groupSettings manual: one save', ups(W) - n0, 1);
+      // The writer also regenerates Kickoff's line with its progress (" · 0/1"), as on any save of this fixture.
+      before = before.replace(' · 2026-09-30\n', ' · 2026-09-30 · 0/1\n');
+      eq('groupSettings manual: only the heading line and the JSON setting changed', after,
+        before.replace('\n## Tasks\n', '\n## Plan\n').replace('"listHeading":"Tasks"', '"listHeading":"Plan"'));
+      return A.undo();
+    }).then(function () {
+      return s.session.busy || ups(W) - n0 > 1 ? saved(W) : A.tapPill();
+    }).then(function () { return saved(W); }).then(function () {
+      eq('groupSettings manual: undo restores the note', content(), before);
+    });
+  });
+}
+
+// §10.2 a11y (pass or fail).
+function groupA11y() {
+  var W, s, d, A;
+  function box(el) { var r = el.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }
+  return ready('gax').then(function (w) {
+    W = w; s = S(W); d = W.document; A = W.GT.app; A.dismissNotice();
+    var hs = Array.prototype.slice.call(d.querySelectorAll('.g-grp')).filter(vis);
+    ok('a11y groups: headers are buttons with aria-expanded matching the collapsed set', hs.length >= 3 && hs.every(function (h) {
+      return h.getAttribute('role') === 'button' && h.getAttribute('aria-expanded') === (s.collapsed.indexOf(h.getAttribute('data-group')) >= 0 ? 'false' : 'true');
+    }));
+    eq('a11y groups: names', hs.map(function (h) { return h.getAttribute('aria-label'); }).join(';'),
+      'Discovery, 2 tasks;Build, 2 tasks, 1 unscheduled;Unscheduled, 3 tasks');
+    ok('a11y groups: the 32 px header is the one exception to 44 px (Q9), full width', Math.round(hs[0].getBoundingClientRect().height) === 32 && hs[0].getBoundingClientRect().width >= 100);
+    // The group sheet from the keyboard: a named dialog, focus in and back.
+    s.view.focusRow('group', 'g1');
+    keyOn(W, d.activeElement, 'F2');
+    var sh = d.getElementById('sheet');
+    eq('a11y group sheet: a dialog named by its title', sh.getAttribute('role') + '|' + d.getElementById(sh.getAttribute('aria-labelledby')).textContent, 'dialog|Discovery');
+    ok('a11y group sheet: focus moved inside', sh.contains(d.activeElement));
+    var lab = d.querySelector('#sheet [data-field="gname"] label');
+    eq('a11y group sheet: the name field has a visible label', lab.getAttribute('for') + '|' + lab.textContent, 'sh-gname-in|Group name');
+    var ctl = Array.prototype.slice.call(d.querySelectorAll('#sheet .sh-gacts .sh-btn, #sheet .sh-gsw .sw, #sheet .sh-close')).filter(vis);
+    ok('a11y group sheet: every control is at least 44x44', ctl.length >= 16 && ctl.every(box), ctl.filter(function (x) { return !box(x); }).map(function (x) { return x.className + ' ' + JSON.stringify(x.getBoundingClientRect()); }).join('; '));
+    eq('a11y group sheet: the colours are a radiogroup of radios', d.querySelector('#sheet .sh-gsw').getAttribute('role') + '|' +
+      Array.prototype.every.call(d.querySelectorAll('#sheet .sh-gsw .sw'), function (b) { return b.getAttribute('role') === 'radio'; }), 'radiogroup|true');
+    keyOn(W, d.activeElement, 'Escape');
+    eq('a11y group sheet: focus back on the header', d.activeElement.getAttribute('data-group'), 'g1');
+    // More > Groups.
+    A.openGroups();
+    eq('a11y Groups: a dialog named Groups', d.getElementById(sh.getAttribute('aria-labelledby')).textContent, 'Groups');
+    var gc = Array.prototype.slice.call(d.querySelectorAll('#sheet .sh-garrow, #sheet .sh-gli .sh-trow, #sheet .sh-gadd'));
+    ok('a11y Groups: rows, arrows and Add group are at least 44x44', gc.length === 7 && gc.every(box), gc.filter(function (x) { return !box(x); }).map(function (x) { return x.className; }).join(','));
+    ok('a11y Groups: rows are one list', d.querySelector('#sheet .sh-glist').getAttribute('role') === 'list' &&
+      Array.prototype.every.call(d.querySelectorAll('#sheet .sh-gli'), function (li) { return li.getAttribute('role') === 'listitem'; }));
+    s.sheet.close();
+    // The task sheet's Group row.
+    A.select('t2');
+    A.openSheet('t2', 'full');
+    var rg = d.querySelector('#sheet .sh-gchips'), radios = rg.querySelectorAll('[role="radio"]');
+    ok('a11y Group row: a radiogroup with exactly one checked radio', rg.getAttribute('role') === 'radiogroup' && radios.length === 3 &&
+      Array.prototype.filter.call(radios, function (b) { return b.getAttribute('aria-checked') === 'true'; }).length === 1);
+    var chips = Array.prototype.slice.call(d.querySelectorAll('#sheet .sh-chip')).filter(vis);
+    // Review round 1: one tab stop (the checked chip), arrows move the focus, nothing commits.
+    var tabs = Array.prototype.filter.call(radios, function (b) { return b.getAttribute('tabindex') === '0'; });
+    ok('a11y Group row: one tab stop, on the checked chip', tabs.length === 1 && tabs[0].getAttribute('aria-checked') === 'true');
+    var n0 = ups(W), g0 = task(W, 't2').group;
+    tabs[0].focus();
+    keyOn(W, tabs[0], 'ArrowRight');
+    var f1 = d.activeElement;
+    ok('a11y Group row: ArrowRight moves the focus and the tab stop', f1 === radios[2] && f1.getAttribute('tabindex') === '0' && tabs[0].getAttribute('tabindex') === '-1');
+    keyOn(W, f1, 'Home');
+    ok('a11y Group row: Home goes to No group', d.activeElement === radios[0]);
+    eq('a11y Group row: arrows commit nothing', (ups(W) - n0) + '|' + task(W, 't2').group, '0|' + g0);
+    ok('a11y Group row: chips and New group… are at least 44x44', chips.length === 4 && chips.every(box), chips.filter(function (x) { return !box(x); }).map(function (x) { return x.textContent; }).join(','));
+    // Review round 2: a pick from the keyboard keeps the focus on the newly checked chip.
+    var bc = d.querySelector('#sheet .sh-gchips [data-group="g2"]');
+    bc.focus();
+    bc.click();
+    var fa = d.activeElement;
+    ok('a11y Group row: after a pick the focus is on the checked chip, in the sheet', task(W, 't2').group === 'g2' && fa && fa.getAttribute('role') === 'radio' &&
+      fa.getAttribute('aria-checked') === 'true' && fa.getAttribute('data-group') === 'g2' && fa.getAttribute('tabindex') === '0', fa && (fa.outerHTML || fa.tagName));
+    s.sheet.close();
+    return saved(W).then(function () { return A.undo(); }).then(function () { return saved(W); }).then(function () {
+    eq('a11y: toasts are a status region', d.getElementById('toast').getAttribute('role'), 'status');
+    // Reduced motion: the drop flash and the slot's slide have zero duration.
+    d.documentElement.classList.add('reduce-motion');
+    s.view.flash('g1');
+    flush(W);
+    var fl = W.getComputedStyle(hdr(W, 'g1'));
+    ok('a11y reduced motion: the header flash does not animate', hdr(W, 'g1').classList.contains('flash') && (fl.animationName === 'none' || parseFloat(fl.animationDuration) === 0));
+    ok('a11y reduced motion: ... and leaves no static tint', fl.backgroundColor === W.getComputedStyle(hdr(W, 'g2')).backgroundColor);
+    s.view.setDragSlot(true);
+    var fr = s.view.rows().map(function (r) { return r.kind + r.id; }).indexOf('taskt2');
+    s.view.setPreview({ kind: 'reorder', id: 't2', dy: 0, from: fr, lo: 0, hi: -1, dir: 0, hd: 44, bubble: '', bx: 0, by: 0 });
+    d.getElementById('gantt').classList.add('live');
+    flush(W);
+    function dur(x) { return parseFloat(W.getComputedStyle(x).transitionDuration) || 0; }
+    ok('a11y reduced motion: rows shifting under a reorder move in zero time', hdr(W, 'g1').classList.contains('g-shift') && dur(hdr(W, 'g1')) === 0, String(dur(hdr(W, 'g1'))));
+    d.documentElement.classList.remove('reduce-motion');
+    ok('a11y reduced motion: ... which is not zero without it', dur(hdr(W, 'g1')) > 0);
+    d.getElementById('gantt').classList.remove('live');
+    s.view.setPreview(null);
+    s.view.setDragSlot(false);
+    d.documentElement.classList.remove('reduce-motion');
+    A.syncMotion();
+    });
+  });
+}
+
 function run(name, fn) {
   return fn().catch(function (e) { ok(name + ' ran to the end', false, String((e && e.stack) || e)); });
 }
@@ -3655,7 +5237,14 @@ function run(name, fn) {
   ['membership', membership], ['toggles', toggles], ['syncDates', syncDates], ['zhNewChart', zhNewChart], ['chooserSpace', chooserSpace],
   ['styles', styles], ['source', source], ['prefs', prefsFlow], ['liteMotion', liteMotion], ['states8', states8], ['review8', review8],
   ['localeLive', localeLive], ['taskList', taskList], ['roving', roving], ['a11y', a11y], ['reconcile', reconcile], ['motion9', motion9], ['cjk9', cjk9], ['review9', review9],
-  ['feedback1', feedback1], ['feedback1r', feedback1r], ['export', exportFlow], ['exportFail', exportFailFlow]].reduce(function (p, x) {
+  ['feedback1', feedback1], ['feedback1r', feedback1r], ['export', exportFlow], ['exportFail', exportFailFlow],
+  ['naming', naming], ['namingZh', namingZh], ['namingEdges', namingEdges], ['g1List', g1List], ['seed', seedFlow], ['noteSync', noteSync],
+  ['groupDrag', groupDrag], ['groupScroll', groupScroll], ['groupSheet', groupSheet], ['groupAdd', groupAdd], ['groupKeys', groupKeys],
+  ['collapse', collapseFlow], ['groupSettings', groupSettings], ['a11yGroups', groupA11y]].filter(function (x) {
+  // ?only=a,b runs just those flows (a dev aid; chrome.js then needs GT_MIN).
+  var only = (/[?&]only=([^&]+)/.exec(location.search) || [])[1];
+  return !only || decodeURIComponent(only).split(',').indexOf(x[0]) >= 0;
+}).reduce(function (p, x) {
   return p.then(function () { return run(x[0], x[1]); });
 }, Promise.resolve()).then(report);
 

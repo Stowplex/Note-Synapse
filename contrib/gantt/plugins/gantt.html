@@ -235,17 +235,41 @@
   @keyframes g-nflash { 50% { background: var(--accent-soft); } }
   .g-grp { padding: 0 8px 0 6px; gap: 5px; font-size: 13px; font-weight: 700;
            color: var(--muted); background: var(--surface-2); border-top: 1px solid var(--border); cursor: pointer; }
-  .g-grp .g-chev { flex: none; width: 14px; transition: transform var(--dur) var(--ease); }
+  /* The glyph is centred in its 14 px box, so the turn keeps it in place (G3 review round 1). */
+  .g-grp .g-chev { flex: none; width: 14px; height: 14px; line-height: 14px; text-align: center; transform-origin: 50% 50%; transition: transform var(--dur) var(--ease); }
   .g-grp.collapsed .g-chev { transform: rotate(-90deg); }
-  .g-grp .g-gt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .g-grp .g-gt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Device feedback review: a CJK title that does not fit takes a second line where the header is tall enough (render.js .tall).
      Latin titles keep one line with an ellipsis, so a single word is never split. */
-  html:lang(zh) .g-grp.tall .g-gt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  .g-grp.tall .g-gt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
                       line-height: 14px; overflow-wrap: anywhere; }
   /* The count is a compact badge, so the title keeps the width. */
   .g-grp .g-gn { flex: none; font-variant-numeric: tabular-nums; font-weight: 650; font-size: 11px; line-height: 16px;
                  min-width: 16px; padding: 0 4px; border-radius: 8px; text-align: center; background: var(--surface-3); }
   .g-grp .g-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--h-fill); }
+  /* G3 (task-groups plan §8.2, §8.7, §8.8): the secondary text, the drop target, the flash after a drop out of sight. */
+  /* The hint gives way first, so a narrow column keeps the group title. */
+  .g-grp .g-gh { flex: 0 100 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                 font-size: 11px; font-weight: 500; color: var(--muted); }
+  .g-grp .g-gh:empty { display: none; }
+  /* A column too narrow for title and hint drops the hint (the count and the header's label still say it). */
+  .g-grp { container-type: inline-size; }
+  /* The query sees the content box: a 230 px column (render.HINT_MIN) less the 14 px padding. */
+  @container (max-width: 215.9px) { .g-grp .g-gh { display: none; } }
+  .g-root.mini .g-grp .g-gh { display: none; }
+  .g-grp.drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft);
+                background: color-mix(in srgb, var(--h-fill) 18%, var(--surface-2)); color: var(--text); }
+  .g-grp.drop .g-gn { background: var(--accent); color: var(--accent-ink); }
+  .g-grp.flash { animation: g-gflash .7s var(--ease) 3; }
+  @keyframes g-gflash { 50% { background: var(--accent-soft); } }
+  /* The No-group slot row of a REORDER drag (§8.1): a dashed outline with "No group". */
+  .g-slot { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 12.5px; font-weight: 600; color: var(--muted); pointer-events: none; }
+  .g-slot::before { content: ''; position: absolute; inset: 5px 8px; border: 1.5px dashed var(--faint); border-radius: 10px; }
+  .g-slot .g-st { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 12px; }
+  .g-slot.drop { color: var(--accent); }
+  .g-slot.drop::before { border-color: var(--accent); background: var(--accent-soft); }
+  .g-root.mini .g-slot .g-st { display: none; }
 
   .g-empty { grid-column: 1 / span 2; grid-row: 2; align-self: center; justify-self: center; text-align: center;
              color: var(--muted); padding: 24px; z-index: 3; pointer-events: none; }
@@ -275,8 +299,10 @@
   #home .h-state button { margin-top: 16px; min-height: 44px; padding: 0 20px; border-radius: 12px; border: 0;
                           background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; }
 
-  #toast { position: fixed; left: 50%; bottom: calc(max(24px, env(safe-area-inset-bottom)) + 56px); transform: translateX(-50%);
-           display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 32px);
+  /* G2 review: beside the FAB, not over it; above the legend when that shows (A.toast sets bottom). */
+  #toast { position: fixed; left: max(16px, env(safe-area-inset-left)); right: calc(max(16px, env(safe-area-inset-right)) + 72px);
+           bottom: calc(max(24px, env(safe-area-inset-bottom)) + 56px); transform: none; max-width: none;
+           display: flex; align-items: center; gap: 12px;
            padding: 10px 16px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 14px; z-index: 20;
            box-shadow: var(--shadow-2); }
   #toast button { flex: none; min-height: 36px; border: 0; background: none; color: inherit; font-weight: 700; cursor: pointer;
@@ -422,6 +448,45 @@
   .sh-btn.danger.armed { background: var(--danger); color: var(--accent-ink); border-color: transparent; }
   .sh-ta { width: 100%; min-height: 96px; padding: 8px 10px; resize: vertical; font: inherit; line-height: 1.4; }
   .sh-ff-date .sh-input { width: 100%; }
+  /* G0: the task sheet's Title / Note title field and its [Rename] button. */
+  .sh-name { margin: 0 0 12px; }
+  .sh-name .sh-flab { display: block; }
+  .sh-nrow { display: flex; gap: 8px; align-items: center; }
+  .sh-nrow .sh-input { flex: 1; min-width: 0; }
+  .sh-nrow .sh-btn { flex: none; }
+  .sh-name .sh-detail { margin: 4px 0 0; }
+  .sh-name input[aria-busy=true] { opacity: .6; }
+  .sh-name input:read-only { color: var(--muted); }
+  .sh-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sh-lhint { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+  /* The create sheet's group chips: whole names, wrapped, 44 px targets. */
+  .sh-ff[data-field="group"] .sh-seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; background: none; }
+  .sh-ff[data-field="group"] .sh-seg button { flex: none; width: auto; max-width: 100%; min-height: 44px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-ff[data-field="group"] .sh-seg button[aria-pressed=true] { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+  /* G3 (task-groups plan §8.3 to §8.6): the task sheet's Group row, the group sheet, More > Groups. */
+  .sh-gchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sh-chip { flex: none; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 44px; padding: 0 14px;
+             border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px;
+             cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-chip .sh-dot { width: 10px; height: 10px; }
+  .sh-chip[aria-checked=true] { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+  .sh-chip.sh-new { margin-top: 6px; color: var(--accent); background: none; border-style: dashed; }
+  .sh-chip:disabled { opacity: .5; cursor: default; }
+  .sh-gsw .sw.auto { width: auto; min-width: 44px; padding: 0 10px; }
+  .sh-gerr { margin: 4px 0 0; color: var(--danger); font-size: 13px; }
+  .sh-gerr:empty { display: none; }
+  .sh-gacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .sh-gacts .sh-btn:disabled { opacity: .45; cursor: default; }
+  .sh-glist { display: flex; flex-direction: column; }
+  .sh-gli { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--border); }
+  .sh-gli:first-child { border-top: 0; }
+  .sh-gli .sh-trow { flex: 1; min-width: 0; min-height: 52px; justify-content: center; }
+  .sh-gli .sh-tm { padding-left: 20px; }
+  .sh-garrow { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: none;
+               color: var(--text); font-size: 18px; cursor: pointer; }
+  .sh-garrow:disabled { opacity: .3; cursor: default; }
+  .sh-gadd { margin-top: 12px; }
   #home .h-new { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; margin-top: 8px;
                  border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 650; cursor: pointer; }
   #home .h-acts { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 4px 8px; }
@@ -569,7 +634,7 @@
   body.lite .g-bar:not(.narrow):not(.ms):not(.ghost) .g-t, body.lite .g-bar:not(.narrow):not(.ms):not(.ghost):not(.nochip) .g-chip {
     padding: 1px 5px; border-radius: 5px; background: var(--seg-lab); color: var(--text); }
   :root.reduce-motion { --dur-fast: .01ms; --dur: .01ms; }
-  :root.reduce-motion .g-bar.flash, :root.reduce-motion .g-name.flash, :root.reduce-motion .sk,
+  :root.reduce-motion .g-bar.flash, :root.reduce-motion .g-name.flash, :root.reduce-motion .g-grp.flash, :root.reduce-motion .sk,
   :root.reduce-motion .g-bar.loading::after, :root.reduce-motion .sheet, :root.reduce-motion .g-handle { animation: none; }
   :root.reduce-motion .g-bar.lift { scale: none; }
   /* M9: reduced motion covers everything (zero, not a tiny duration: a
@@ -604,7 +669,7 @@
   }
   @media (prefers-reduced-motion: reduce) {
     :root { --dur-fast: .01ms; --dur: .01ms; }
-    .g-bar.flash, .g-name.flash, .sk, .g-bar.loading::after, .sheet, .g-handle { animation: none; }
+    .g-bar.flash, .g-name.flash, .g-grp.flash, .sk, .g-bar.loading::after, .sheet, .g-handle { animation: none; }
     .g-bar.lift { scale: none; }
     *, *::before, *::after { animation: none !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
     .g-bar.flash { box-shadow: var(--sel-ring); }

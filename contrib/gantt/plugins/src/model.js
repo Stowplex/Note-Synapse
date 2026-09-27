@@ -35,7 +35,10 @@
     ['progressSource', 'subnotes'], ['progressSection', 'Checklist'], ['childTasks', true],
     ['progressStyle', 'fill'], ['colorBy', 'status'], ['scale', 'week'], ['weekStart', null],
     ['workdays', [1, 2, 3, 4, 5]], ['holidays', []], ['mirror', true], ['embed', false],
-    ['syncDates', false]
+    ['syncDates', false],
+    // Task-groups plan §7.1: appended after syncDates so blocks that kept
+    // them in _x serialise byte-identically. listHeading null = legacy chart.
+    ['listHeading', null], ['listLevel', 2], ['seedSkip', null]
   ];
   var SETTING_KEYS = SETTINGS.map(function (p) { return p[0]; });
   var TASK_KEYS = ['id', 'note', 'title', 'start', 'end', 'group', 'color', 'milestone', 'after', 'progress'];
@@ -141,6 +144,18 @@
             });
             s[k] = w.sort();
           }
+          break;
+        case 'listHeading':
+          okv = typeof v === 'string' && /\S/.test(v);
+          if (okv) s[k] = v;
+          break;
+        case 'listLevel':
+          okv = typeof v === 'number' && v >= 1 && v <= 5 && v === Math.floor(v);
+          if (okv) s[k] = v;
+          break;
+        case 'seedSkip':
+          okv = typeof v === 'string' && /^[0-9a-f]{8}$/.test(v);
+          if (okv) s[k] = v;
           break;
         case 'holidays':
           if (Array.isArray(v)) {
@@ -371,6 +386,12 @@
   }
   M.task = function (chart, id) { var i = indexOf(chart.tasks, id); return i < 0 ? null : chart.tasks[i]; };
   M.group = function (chart, id) { var i = indexOf(chart.groups, id); return i < 0 ? null : chart.groups[i]; };
+  // The task holding a note (D20: at most one), or null. G0 checks it
+  // before a link so a clash is said instead of dropped (§8.9.1).
+  M.holderOf = function (chart, noteId) {
+    for (var i = 0; i < chart.tasks.length; i++) if (noteId && chart.tasks[i].note === noteId) return chart.tasks[i];
+    return null;
+  };
 
   function noop(chart) { return { chart: chart, inverse: [] }; }
   function day(x) { return typeof x === 'number' && isFinite(x) ? D.clamp(Math.round(x)) : null; }
@@ -601,6 +622,177 @@
     return { chart: withGroups(chart, groups, tasks), inverse: inverse };
   };
 
+  /* ------------------------------------------ task groups (task-groups §7.2) */
+
+  // The group a task shows in: its group when that exists, else ungrouped.
+  function groupOf(chart, t) { return t.group !== null && t.group !== undefined && M.group(chart, t.group) ? t.group : null; }
+
+  /*
+   * Move a task into group `gid` (null: ungrouped). `opt` is a task index
+   * (as reorder's) or {after}. Without an index: after task `after` when it
+   * is in that group, else after the last task of `gid`, else after the last
+   * task of the nearest earlier group, else first. Inverse: reorder's.
+   */
+  M.moveToGroup = function (chart, id, gid, opt) {
+    var t = M.task(chart, id);
+    if (gid === undefined) gid = null;
+    if (!t || (gid !== null && !M.group(chart, gid))) return noop(chart);
+    if (typeof opt === 'number') return M.reorder(chart, id, opt, gid);
+    var rest = chart.tasks.filter(function (x) { return x.id !== id; }), at = -1;
+    function lastOf(g) {
+      for (var k = rest.length - 1; k >= 0; k--) if (groupOf(chart, rest[k]) === g) return k;
+      return -1;
+    }
+    var after = opt && typeof opt.after === 'string' ? opt.after : null;
+    if (after !== null) {
+      var a = indexOf(rest, after);
+      if (a >= 0 && groupOf(chart, rest[a]) === gid) at = a + 1;
+    }
+    if (at < 0) { var l = lastOf(gid); if (l >= 0) at = l + 1; }
+    if (at < 0 && gid !== null) {
+      for (var j = indexOf(chart.groups, gid) - 1; j >= 0 && at < 0; j--) {
+        var e = lastOf(chart.groups[j].id);
+        if (e >= 0) at = e + 1;
+      }
+    }
+    return M.reorder(chart, id, at < 0 ? 0 : at, gid);
+  };
+
+  // Move a group to index `toIndex` of groups[]. Inverse: a gorder patch.
+  M.moveGroup = function (chart, gid, toIndex) {
+    var i = indexOf(chart.groups, gid);
+    if (i < 0 || typeof toIndex !== 'number' || !isFinite(toIndex)) return noop(chart);
+    var groups = chart.groups.slice(), g = groups.splice(i, 1)[0];
+    var to = Math.max(0, Math.min(groups.length, Math.floor(toIndex)));
+    if (to === i) return noop(chart);
+    groups.splice(to, 0, g);
+    return { chart: withGroups(chart, groups), inverse: [{ op: 'gorder', ids: chart.groups.map(idOf) }] };
+  };
+
+  /*
+   * applyList(chart, list) -> {chart, inverse, patch, changed, report, moves,
+   * renames, newGroups, deleted, remap}. Task-groups plan §6.1: the chart the
+   * note's list describes. `list` is block.read's fr.list for this chart:
+   * its sections carry the §6.1 step 1 mapping (marker.gid, kind, dupOf).
+   * Pure. Tasks under a duplicate marker, tasks whose JSON group is gone
+   * (held) and ambiguous tasks keep their group and slot. Order is folded
+   * per group (the note says nothing about tasks[] across groups; see the
+   * G2 build log). `patch` is the forward patch list, `inverse` undoes it.
+   */
+  M.applyList = function (chart, list) {
+    var report = { moved: [], renamed: [], added: [], groupsReordered: false, tasksReordered: false,
+      goneGroups: [], held: [], placement: {}, ambiguous: [], duplicates: [], plainElsewhere: [] };
+    function result(c, inverse, patch) {
+      return { chart: c, inverse: inverse, patch: patch, changed: inverse.length > 0, report: report,
+        moves: report.moved, renames: report.renamed, newGroups: report.added,
+        deleted: { groups: report.goneGroups, tasks: unlisted }, remap: remap };
+    }
+    var unlisted = [], remap = [];
+    if (!list || !Array.isArray(list.sections)) return result(chart, [], []);
+    var amb = Object.create(null);
+    (list.ambiguous || []).forEach(function (id) { amb[id] = true; });
+    report.ambiguous = (list.ambiguous || []).slice();
+    report.duplicates = (list.duplicates || []).slice();
+    report.plainElsewhere = (list.plainElsewhere || []).slice();
+
+    // Sections: kind ungrouped | mapped (same, overlap, position) | new | held.
+    var claimed = Object.create(null), seenTask = Object.create(null), listed = Object.create(null);
+    var secs = list.sections.map(function (s, i) {
+      var m = s && s.marker, sec = { kind: 'ungrouped', gid: null, title: '', rename: false, tasks: [], place: null };
+      if (m) {
+        var gid = typeof m.gid === 'string' && m.gid ? m.gid : null, exists = gid !== null && !!M.group(chart, gid);
+        sec.title = typeof m.title === 'string' ? m.title : '';
+        if (m.kind === 'duplicate' || gid === null || claimed[gid] || (m.kind !== 'new' && !exists)) {
+          sec.kind = 'held';
+          sec.place = m.kind === 'duplicate' && typeof m.dupOf === 'string' && M.group(chart, m.dupOf) ? m.dupOf : null;
+        } else {
+          claimed[gid] = true;
+          sec.gid = gid;
+          sec.kind = m.kind === 'new' && !exists ? 'new' : 'mapped';
+          sec.rename = (m.kind === 'overlap' || m.kind === 'position') && exists;
+          sec.place = gid;
+        }
+      }
+      remap.push(sec.kind === 'held' ? sec.place : sec.gid);
+      ((s && s.tasks) || []).forEach(function (id) {
+        if (typeof id !== 'string' || seenTask[id] || amb[id] || !M.task(chart, id)) return;
+        seenTask[id] = true;
+        sec.tasks.push(id);
+      });
+      return sec;
+    });
+    chart.tasks.forEach(function (t) { if (t.note && !seenTask[t.id] && !amb[t.id]) unlisted.push(t.id); });
+    var gone = Object.create(null);
+    chart.groups.forEach(function (g) { if (!claimed[g.id]) { gone[g.id] = true; report.goneGroups.push(g.id); } });
+
+    // Membership (step 3) and held tasks.
+    var target = Object.create(null);
+    secs.forEach(function (sec) {
+      var prev = null;
+      sec.tasks.forEach(function (id) {
+        var t = M.task(chart, id);
+        if (sec.kind === 'held' || (t.group !== null && gone[t.group])) {
+          report.held.push(id);
+          report.placement[id] = { group: sec.place, after: prev };
+        } else {
+          target[id] = sec.gid;
+          listed[id] = true;
+          if (t.group !== sec.gid) report.moved.push({ id: id, from: t.group, to: sec.gid });
+        }
+        prev = id;
+      });
+    });
+
+    var cur = chart, inverse = [], patch = [];
+    function run(p) {
+      var r = M.applyPatch(cur, [p]);
+      if (!r.inverse.length) return;
+      cur = r.chart;
+      inverse = r.inverse.concat(inverse);
+      patch.push(p);
+    }
+    // Step 4, groups: mapped groups take their slots in note order.
+    var mapped = secs.filter(function (s) { return s.kind === 'mapped'; }).map(function (s) { return s.gid; });
+    var was = chart.groups.map(idOf).filter(function (id) { return claimed[id]; });
+    report.groupsReordered = !same(was, mapped);
+    run({ op: 'gorder', ids: mapped });
+    // New groups right after the group of the section above them, else first.
+    var placed = null;
+    secs.forEach(function (sec) {
+      if (sec.kind === 'new') {
+        var at = placed === null ? 0 : indexOf(cur.groups, placed) + 1;
+        run({ op: 'group', id: sec.gid, index: at, group: { id: sec.gid, title: sec.title, color: null, _x: {} } });
+        report.added.push({ id: sec.gid, title: sec.title });
+      }
+      if (sec.kind === 'new' || sec.kind === 'mapped') placed = sec.gid;
+    });
+    // Step 2, titles: renames by overlap or position take the marker's text.
+    secs.forEach(function (sec) {
+      if (!sec.rename) return;
+      var old = M.group(cur, sec.gid);
+      if (old.title === sec.title) return;
+      var g = copyGroup(old);
+      g.title = sec.title;
+      if (has(g._x, 'title')) g._x = copyX(g._x, 'title');
+      run({ op: 'group', id: sec.gid, group: g });
+      report.renamed.push({ id: sec.gid, from: old.title, to: sec.title });
+    });
+    // Step 3: membership (an unchanged in-memory group, shadow included, stays).
+    chart.tasks.forEach(function (t) {
+      if (listed[t.id] && t.group !== target[t.id]) run({ op: 'set', id: t.id, fields: { group: target[t.id] } });
+    });
+    // Step 4, tasks: per group, the listed tasks take their slots in note order.
+    secs.forEach(function (sec) {
+      if (sec.kind === 'held') return;
+      var ids = sec.tasks.filter(function (id) { return listed[id]; });
+      var stay = ids.filter(function (id) { return M.task(chart, id).group === sec.gid; });
+      var before = chart.tasks.map(idOf).filter(function (id) { return stay.indexOf(id) >= 0; });
+      if (!same(before, stay)) report.tasksReordered = true;
+      if (ids.length > 1) run({ op: 'order', ids: ids });
+    });
+    return result(cur, inverse, patch);
+  };
+
   M.setSettings = function (chart, fields) {
     var s = {}, prev = {}, changed = false;
     SETTING_KEYS.forEach(function (k) { s[k] = chart.settings[k]; });
@@ -634,6 +826,12 @@
       case 'toggleSubnote': b.done = !a.done; break;
       case 'setChildStatus': b.status = a.prev; b.prev = a.status; break;
       case 'renameChart': b.title = a.prev; b.prev = a.title; break;
+      // G0 (§8.9.2): a task note renamed from its sheet.
+      case 'renameNote': b.title = a.prev; b.prev = a.title; break;
+      // G2: a line of an attached block put back, or taken out again.
+      case 'attachLine': b.remove = !a.remove; break;
+      // G2 review round 1: Use as groups' seed text put back, or taken again.
+      case 'seedText': b.remove = !a.remove; break;
     }
     return { op: 'host', kind: p.kind, args: b };
   }
@@ -717,6 +915,18 @@
         tasks = chart.tasks.slice();
         want.forEach(function (id, k) { tasks[slots[k]] = chart.tasks[indexOf(chart.tasks, id)]; });
         return { chart: withTasks(chart, tasks), inverse: { op: 'order', ids: cur } };
+      }
+      case 'gorder': {
+        // Task-groups §7.2: `order` for groups[]. Groups not listed (added
+        // since) keep their slots; unknown and repeated ids are skipped.
+        if (!Array.isArray(p.ids)) return { chart: chart };
+        var gw = p.ids.filter(function (id, k, arr) { return typeof id === 'string' && indexOf(chart.groups, id) >= 0 && arr.indexOf(id) === k; });
+        var gslots = [], gcur = [];
+        chart.groups.forEach(function (g, k) { if (gw.indexOf(g.id) >= 0) { gslots.push(k); gcur.push(g.id); } });
+        if (same(gcur, gw)) return { chart: chart };
+        var gs = chart.groups.slice();
+        gw.forEach(function (id, k) { gs[gslots[k]] = chart.groups[indexOf(chart.groups, id)]; });
+        return { chart: withGroups(chart, gs), inverse: { op: 'gorder', ids: gcur } };
       }
       case 'settings': {
         var rs = M.setSettings(chart, p.fields || {});

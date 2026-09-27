@@ -116,8 +116,12 @@ compatibility.
   pinch, drag to move and resize, reorder and group, add existing notes or
   create task notes, and see each bar filled by its sub-notes, child tasks or
   the checkboxes under one heading. The whole chart lives in one ordinary note
-  as a readable task list plus a JSON block, saved with exact in-place edits
-  so the rest of the note is never rewritten; unsaved edits survive a closed
-  app. Light and dark, English and Simplified Chinese, with a keyboard and
-  screen-reader friendly Task list. Ships as **Gantt** (a home screen of your
-  charts) and **Gantt: this note** (the note action).
+  as a task list under a `## Tasks` heading, with each group as a `###`
+  heading, plus a JSON block, saved with exact in-place edits so the rest of
+  the note is never rewritten; unsaved edits survive a closed app. Groups can
+  be collapsed, renamed, recoloured and reordered, and tasks dragged between
+  them; moving a task line under another heading in the note regroups the
+  chart too (with Undo), and headings with note links typed above a chart can
+  become its groups. Light and dark, English and Simplified Chinese, with a
+  keyboard and screen-reader friendly Task list. Ships as **Gantt** (a home
+  screen of your charts) and **Gantt: this note** (the note action).

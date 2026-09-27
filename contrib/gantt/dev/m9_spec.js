@@ -285,12 +285,16 @@
 
   var CH = 'chart-1';
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // G1: list charts (settings.listHeading), written with the list gate.
+  var LIST = { list: true };
   function chartS(settings) {
-    return M.coerce({ v: 1, settings: settings || {}, tasks: [
+    var set = Object.assign({ listHeading: 'Tasks' }, settings || {});
+    if (set.listHeading === null) delete set.listHeading;
+    return M.coerce({ v: 1, settings: set, tasks: [
       { id: 't1', note: 'n1', title: 'Task one', start: '2026-10-03', end: '2026-10-10' },
       { id: 't2', note: 'n2', title: 'Task two', start: '2026-10-05', end: '2026-10-12' }] }).chart;
   }
-  function noteText(c) { return 'Intro text.\n\n' + B.region(c, null, {}); }
+  function noteText(c) { return 'Intro text.\n\n' + B.region(c, null, LIST); }
   function env(o) {
     o = o || {};
     var storage = o.storage || new Map(), q = [], flags = { hidden: false }, tq = [];
@@ -321,7 +325,7 @@
     var e = env({ seed: o.seed || [{ id: CH, title: 'Plan', content: o.text || noteText(S0) },
       { id: 'n1', title: 'Task one', type: 'task' }, { id: 'n2', title: 'Task two', type: 'task' }], storage: o.storage, db: o.db, mock: o.mock });
     if (o.approved !== false) { e.st.launch.sessionApproved = true; e.mock.sessionApproved = true; }
-    return e.st.boot().then(function () { return e.st.open(o.read ? { noteId: CH, read: B.read(e.mock.content(CH)) } : CH); }).then(function (r) {
+    return e.st.boot().then(function () { return e.st.open(o.read ? { noteId: CH, read: B.read(e.mock.content(CH)), text: e.mock.content(CH) } : CH); }).then(function (r) {
       e.s = r.session;
       return Promise.all([e.s.checked, e.s.resolved]);
     }).then(function () { return settle(e); }).then(function () { return e; });
@@ -519,7 +523,7 @@
         same('an edited line is reported as edited, not deleted', e.st.mirrorGap(), { deleted: [], edited: ['t1'] });
         // Another device changed the block and dropped a line: not ours.
         var other = M.moveTask(A5, 't2', 1).chart;
-        e.mock.setNote(CH, dropLine('Intro text.\n\n' + B.region(other, null, {}), 'n2'));
+        e.mock.setNote(CH, dropLine('Intro text.\n\n' + B.region(other, null, LIST), 'n2'));
         return e.mock.resume();
       }).then(function () { return settle(e); }).then(function () {
         eq('a block changed elsewhere is not compared (its key is not the one written)', e.st.mirrorGap(), null);

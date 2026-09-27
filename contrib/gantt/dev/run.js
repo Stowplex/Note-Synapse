@@ -33,12 +33,17 @@ if (process.env.GT_SEED) globalThis.GT_SEED = Number(process.env.GT_SEED);
 require('./spec.js');
 require('./host_spec.js');
 require('./store_spec.js');
+require('./sync_spec.js');
 require('./view_spec.js');
 require('./gesture_spec.js');
 require('./edit_spec.js');
 require('./style_spec.js');
 require('./m9_spec.js');
 require('./export_spec.js');
+require('./list_spec.js');
+require('./naming_spec.js');
+require('./groups_spec.js');
+require('./groups_ui_spec.js');
 globalThis.GT.spec.run().then(function (res) {
   var fail = res.filter(function (r) { return !r.pass; });
   res.forEach(function (r) { if (!r.pass) console.log('FAIL  ' + r.name + (r.detail ? '\n      ' + String(r.detail).replace(/\n/g, '\n      ') : '')); });

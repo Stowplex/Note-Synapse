@@ -159,6 +159,14 @@
     } else if (kind === 'malformed') {
       text = A.bannerText(kind);
       if (!S.launch.embed) acts = [{ id: 'repair', label: T('Repair'), run: function () { A.confirmRepair('malformed'); } }];
+    } else if (kind === 'heading-missing' && ui.missing) {
+      // Task-groups plan §5.6: saves are held until one of these is tapped.
+      text = I().fmt('The “{heading}” heading above the task list is missing.', { heading: ui.missing.heading });
+      acts = [{ id: 'restore-heading', label: T('Restore heading'), run: A.restoreHeading }];
+      if (ui.missing.useAs) {
+        acts.push({ id: 'use-heading', label: I().fmt('Use “{text}” as the list heading', { text: ui.missing.useAs }), run: A.useListHeading });
+      }
+      acts.push({ id: 'list-off', label: T('Turn list off'), run: A.listOff });
     } else if (kind) {
       text = A.bannerText(kind);
     } else if (s.extra) {
@@ -166,19 +174,12 @@
       if (!S.launch.embed) acts = [{ id: 'first', label: T('Use the first block'), run: function () { A.confirmRepair('extra'); } }];
       kind = 'extra';
     } else if (editable()) {
-      // M9 reconciliation (§5.1): task lines the user deleted from the list
-      // above the chart. Nothing changes until one of the buttons is tapped.
-      var gap = S.store.mirrorGap();
-      if (gap && gap.deleted.length) {
-        kind = 'mirror-gone';
-        text = I().fmt('Removed in the note: {titles}. Remove from chart?', { titles: titlesOf(gap.deleted) });
-        acts = [{ id: 'remove-gone', label: T('Remove'), run: function () { A.removeGone(gap.deleted); } },
-          { id: 'restore-list', label: T('Restore list'), run: function () { A.restoreList(); } }];
-      } else if (gap && gap.edited.length && s.mirrorAck !== gap.edited.join(',')) {
-        kind = 'mirror-edited';
-        text = T('The task list above the chart was edited. It is kept as your text.');
-        acts = [{ id: 'mirror-ok', label: T('Got it'), run: function () { s.mirrorAck = gap.edited.join(','); syncUi(); } }];
-      }
+      // M9 reconciliation (§5.1) and the task list banners (task-groups
+      // plan §6.3), one at a time in this order: removals, seed, promote,
+      // additions, listed more than once, edited. Nothing changes until a
+      // button is tapped.
+      var lb = listBanner(s);
+      if (lb) { kind = lb.kind; text = lb.text; acts = lb.acts; }
     }
     if (!text) { lastBanner = ''; hideBanner(); return; }
     // Rebuilt only when it changed, so a button under a finger stays put.
@@ -187,6 +188,112 @@
     lastBanner = key;
     banner(text, acts, kind);
   }
+
+  /* ------------------------------------ the task list (task-groups §6.3) */
+
+  function groupTitle(gid) {
+    var c = live(), g = c && gid ? M().group(c, gid) : null;
+    return g ? (g.title || T('Untitled')) : T('No group');
+  }
+  // Names, the first three then "{n} more" (the removal banner's rule).
+  function namesOf(names) {
+    var out = names.slice(0, 3);
+    if (names.length > 3) out.push(I().fmt('{n} more', { n: names.length - 3 }));
+    return I().list(out);
+  }
+  function quoted(t) { return '“' + t + '”'; }
+  function listView() { return S.listView || (S.listView = listViewOf(null)); }
+  function hashOf(texts) { return GT.block.hash(texts.join('\n')); }
+
+  function listBanner(s) {
+    var gap = S.store.listReport(), ls = S.store.listState(), lv = listView();
+    if (gap && (gap.deleted.length || gap.goneGroups.length)) {
+      var names = gap.goneGroups.map(function (g) { return I().fmt('{title} (group)', { title: groupTitle(g) }); })
+        .concat(gap.deleted.map(function (id) { return titleOf(id); }));
+      return { kind: 'mirror-gone', text: I().fmt('Removed in the note: {titles}. Remove from chart?', { titles: namesOf(names) }),
+        acts: [{ id: 'remove-gone', label: T('Remove'), run: function () { A.removeGone(gap.deleted, gap.goneGroups, gap.placement); } },
+          { id: 'restore-list', label: T('Restore list'), run: function () { A.restoreList(); } }] };
+    }
+    if (ls) {
+      // An Add offer answered Not now comes back only after its link left
+      // the list and returned.
+      var offered = ls.offers.map(function (o) { return o.note; });
+      var kept = lv.dismissed.filter(function (id) { return offered.indexOf(id) >= 0; });
+      if (kept.length !== lv.dismissed.length) { lv.dismissed = kept; noteCamera(); }
+      if (ls.seed && lv.seedHidden !== ls.seed.hash) {
+        var sd = ls.seed;
+        return { kind: 'list-seed', text: I().fmt('Use these headings as groups? The note lists {n} task(s) in {m} group(s) above the chart.', { n: sd.tasks, m: sd.groups.length }),
+          acts: [{ id: 'seed-use', label: T('Use as groups'), run: A.useSeed },
+            { id: 'seed-later', label: T('Not now'), run: function () { A.seedLater(sd.hash); } }] };
+      }
+      var pr = ls.promote.map(function (p) { return GT.block.norm(p.text); });
+      if (pr.length && lv.promoteHidden !== hashOf(pr)) {
+        return { kind: 'list-promote', text: pr.length === 1 ? I().fmt('Make “{title}” a group?', { title: pr[0] }) : I().fmt('Make {titles} groups?', { titles: I().list(pr.map(quoted)) }),
+          acts: [{ id: 'promote-make', label: T('Make groups'), run: A.makeGroups },
+            { id: 'promote-later', label: T('Not now'), run: function () { A.promoteLater(hashOf(pr)); } }] };
+      }
+      var offers = ls.offers.filter(function (o) { return lv.dismissed.indexOf(o.note) < 0; });
+      if (offers.length) {
+        return { kind: 'list-added', text: I().fmt('Added in the note: {titles}. Add to chart?', { titles: namesOf(offers.map(function (o) { return o.text || T('Untitled'); })) }),
+          acts: [{ id: 'offer-add', label: T('Add'), run: function () { A.addOffered(offers); } },
+            { id: 'offer-later', label: T('Not now'), run: function () { A.offersLater(offers); } }] };
+      }
+      var twice = ls.ambiguous.concat(ls.plainElsewhere.filter(function (id) { return ls.ambiguous.indexOf(id) < 0; }));
+      var dn = twice.map(function (id) { return titleOf(id); }).concat(ls.duplicates.map(function (d) { return I().fmt('{title} (group)', { title: groupTitle(d.gid) }); }));
+      var dk = twice.join(',') + '|' + ls.duplicates.map(function (d) { return d.gid + '@' + d.line; }).join(',');
+      if (dn.length && s.dupAck !== dk) {
+        return { kind: 'list-twice', text: I().fmt('Listed more than once in the note: {titles}. Delete one copy to let the chart update it.', { titles: namesOf(dn) }),
+          acts: [{ id: 'twice-ok', label: T('Got it'), run: function () { s.dupAck = dk; syncUi(); } }] };
+      }
+    }
+    if (gap && gap.edited.length && s.mirrorAck !== gap.edited.join(',')) {
+      return { kind: 'mirror-edited', text: T('The task list above the chart was edited. It is kept as your text.'),
+        acts: [{ id: 'mirror-ok', label: T('Got it'), run: function () { s.mirrorAck = gap.edited.join(','); syncUi(); } }] };
+    }
+    return null;
+  }
+
+  /*
+   * The silent fold toast (§6.3): "Updated from the note: …", three changes
+   * at most then "and {n} more", names read from the live chart when shown,
+   * with Undo note changes while editable (one undo entry, saved like any
+   * edit; the fold's inverse patches are guarded, so this is safe after a
+   * merge).
+   */
+  function foldChanges(rep) {
+    var items = [];
+    // "{task} → {group}" reads the same in zh-CN (§9; the audit lists it).
+    rep.moved.forEach(function (m) { items.push(I().fmt('{task} → {group}', { task: titleOf(m.id), group: groupTitle(m.to) })); });
+    rep.renamed.forEach(function (r) { items.push(I().fmt('{old} renamed to {new}', { old: r.from || T('Untitled'), new: groupTitle(r.id) })); });
+    rep.added.forEach(function (g) { items.push(I().fmt('New group {title}', { title: groupTitle(g.id) })); });
+    if (rep.groupsReordered) items.push(T('Groups reordered'));
+    if (rep.tasksReordered && !rep.moved.length) items.push(T('Tasks reordered'));
+    return items;
+  }
+  A.foldText = function (rep) {
+    var items = foldChanges(rep), zh = I().language === 'zh-CN';
+    var text = items.slice(0, 3).join(zh ? '，' : ', ');
+    if (items.length > 3) text += ' ' + I().fmt('and {n} more', { n: items.length - 3 });
+    return I().fmt('Updated from the note: {changes}', { changes: text });
+  };
+  function showFoldToast() {
+    var s = S.session;
+    if (!s || S.store.session !== s || S.mode !== 'chart') return false;
+    var n = S.store.takeFold();
+    if (!n) return false;
+    var text = A.foldText(n.report);
+    S.foldShown = text;
+    S.foldUndo = editable();
+    A.toast(text, editable() ? { label: T('Undo'), run: function () { A.undoNoteChanges(n.inverse); } } : null);
+    return true;
+  }
+  A.showFoldToast = showFoldToast;
+  A.undoNoteChanges = function (inverse) {
+    var c = live();
+    if (!c || !editable() || !inverse || !inverse.length) return false;
+    var r = M().applyPatch(c, inverse);
+    return commitEdit({ chart: r.chart, inverse: r.inverse }, 'Undo note changes');
+  };
 
   /* --------------------------------------------------------- state pages */
 
@@ -503,7 +610,10 @@
     var section = String(v.section == null ? '' : v.section).trim() || GT.md.defaultSection(S.host.locale());
     var spec = {
       title: String(v.title == null ? '' : v.title).trim() || T('New chart'), intro: v.intro || '', notes: v.notes || [],
-      settings: { progressSource: v.source === 'checklist' ? 'checklist' : 'subnotes', progressSection: section }
+      // The task list heading is note content, stored once from the UI
+      // language like the section (task-groups plan §5.2.1).
+      settings: { progressSource: v.source === 'checklist' ? 'checklist' : 'subnotes', progressSection: section,
+        listHeading: GT.md.defaultListHeading(S.host.locale()) }
     };
     return openWith({ title: spec.title }, function () { return S.store.createChart(spec); }, function () { A.createChart(v); });
   };
@@ -511,6 +621,16 @@
   /* --------------------------------------------------------------- chart */
 
   function collapsedOf(view) { return view && Array.isArray(view.collapsed) ? view.collapsed.slice() : []; }
+  // G2 (§5.5, §6.3): the list offers' view state per chart (D5): the notes
+  // whose Add offer was answered Not now, the hidden seed and promote hashes.
+  function listViewOf(view) {
+    var v = view || {};
+    return {
+      dismissed: Array.isArray(v.dismissed) ? v.dismissed.filter(function (x) { return typeof x === 'string'; }) : [],
+      seedHidden: typeof v.seedHidden === 'string' ? v.seedHidden : null,
+      promoteHidden: typeof v.promoteHidden === 'string' ? v.promoteHidden : null
+    };
+  }
 
   function renderSession(s) {
     if (S.session !== s) return;
@@ -624,13 +744,17 @@
       S.session = s;
       var cached = S.store.cache.get(s.noteId);
       S.collapsed = collapsedOf(cached && cached.view);
+      pruneCollapsed(s.live);
+      S.listView = listViewOf(cached && cached.view);
       if (s.title) setTitle(s.title);
       else if (!target.title) setTitle(T('Gantt'));
       renderSession(s);
       S.view.home(initialCamera(s, target));
       syncUi();
       s.resolved.then(function () { renderSession(s); if (S.sheet.isOpen()) S.sheet.update(); });
-      s.checked.then(function () { syncUi(); });
+      // The fold toast once the journal check has run, so Undo is offered
+      // while the chart is editable.
+      s.checked.then(function () { syncUi(); showFoldToast(); });
       return res;
     });
   };
@@ -667,8 +791,9 @@
     if (left > 0) { viewTimer = win.setTimeout(saveView, left); return; }
     var s = viewFor;
     if (!s || S.session !== s) return;
-    var c = S.view.camera();
-    S.store.cache.setView(s.noteId, { ppd: c.ppd, scrollDay: S.view.leftDay(), sy: c.sy, collapsed: S.collapsed.slice() });
+    var c = S.view.camera(), lv = S.listView || listViewOf(null);
+    S.store.cache.setView(s.noteId, { ppd: c.ppd, scrollDay: S.view.leftDay(), sy: c.sy, collapsed: S.collapsed.slice(),
+      dismissed: lv.dismissed.slice(), seedHidden: lv.seedHidden, promoteHidden: lv.promoteHidden });
   }
   var segMemo = '', segPpd = null, SEG = ['day', 'week', 'month'];
   function syncZoomSeg() {
@@ -729,6 +854,13 @@
     S.items = null;
     itemsSeq++;
     S.stack = GT.undo.createStack({ cap: 100 });
+    // G2 (§5.5): a commit that carried a seed's pending seedSkip puts that
+    // setting's inverse into the same undo entry.
+    var push = S.stack.push;
+    S.stack.push = function (e) {
+      var x = S.store && S.store.takeSkipInverse ? S.store.takeSkipInverse() : [];
+      return push(e && x.length ? Object.assign({}, e, { patches: e.patches.concat(x) }) : e);
+    };
     if (S.view) { S.view.setSelection(null); S.view.setPreview(null); }
     if (S.sheet && S.sheet.isOpen()) S.sheet.close();
     S.conflict = null;
@@ -738,13 +870,14 @@
    * commitEdit(res, action, id, {save, coalesceKey}): res is a model
    * transform's {chart, inverse}. A no-op is not committed; a refused
    * commit (hold, read-only) pushes nothing. save: 'now' (a gesture,
-   * default) or 'debounce' (keyboard nudges, sheet inputs).
+   * default) or 'debounce' (keyboard nudges, sheet inputs). o.label: the
+   * undo label when it names a group, not a task (G3).
    */
   function commitEdit(res, action, id, o) {
     o = o || {};
     if (!res || !res.inverse || !res.inverse.length || !editable()) return false;
     if (!S.store.commit(res.chart, { save: o.save || 'now' })) return false;
-    S.stack.push({ label: labelOf(action, id), patches: res.inverse, coalesceKey: o.coalesceKey || null });
+    S.stack.push({ label: o.label || labelOf(action, id), patches: res.inverse, coalesceKey: o.coalesceKey || null });
     afterChange();
     return true;
   }
@@ -763,6 +896,8 @@
     return p.then(function (r) {
       var s = S.session;
       if (s && s.title) setTitle(s.title);
+      // G0: a task note renamed back (or again): the chart's copy follows.
+      if (r.ok && String(r.label || '').split(SEP)[0] === 'Rename note') S.store.followTitles();
       afterChange();
       if (!r.ok && r.reason !== 'empty' && r.reason !== 'held') {
         var msg = r.reason === 'denied' ? 'Couldn’t undo: not approved' : 'Couldn’t undo: the note changed';
@@ -830,6 +965,12 @@
     if (!e) return null;
     return e.classList.contains('g-grp') ? { kind: 'group', id: e.getAttribute('data-group') } : { kind: 'task', id: e.getAttribute('data-id') };
   }
+  // Focus a task's row, or its group's header when the row is folded away (G3).
+  function focusTask(id) {
+    if (S.view.focusRow('task', id)) return true;
+    var t = taskOf(id), c = live();
+    return !!(t && t.group && c && M().group(c, t.group)) && S.view.focusRow('group', t.group);
+  }
   A.openSheet = function (id, detent) {
     if (!taskOf(id)) return false;
     return S.sheet.openTask(id, detent || 'peek');
@@ -847,13 +988,24 @@
     var t = taskOf(id);
     if (!t) return null;
     var inf = S.view.info(id) || {};
+    // G0 (§8.9): the name field shows the note's title for a noted task,
+    // else the chart's own title.
+    var f = t.note && S.session && S.session.facts ? S.session.facts[t.note] : null;
+    var name = t.note && f && !f.missing && typeof f.title === 'string' && f.title ? f.title : (t.title || '');
+    var c = live();
     return {
       id: id, title: inf.title || t.title || T('Untitled'), hue: inf.hue || 'slate', start: t.start, end: t.end,
       milestone: t.milestone, color: t.color, note: !!t.note, readOnly: !editable(),
+      name: name, missing: !!(t.note && f && f.missing), syncDates: !!(c && c.settings.syncDates), renaming: renaming === id,
       progress: { ratio: typeof inf.ratio === 'number' ? inf.ratio : 0, text: progressText(inf.sum) },
-      items: itemsFor(id)
+      items: itemsFor(id),
+      // G3 (§8.5): the Group row. A shadow group reads as No group.
+      group: c && t.group && M().group(c, t.group) ? t.group : null,
+      groups: c ? c.groups.map(function (g) { return { id: g.id, title: g.title || T('Untitled'), hue: groupHue(c, g) }; }) : []
     };
   }
+  // A group's colour as the header draws it (render.paintGroup).
+  function groupHue(c, g) { return GT.layout.colorFor(null, null, c.groups.indexOf(g), { colorBy: 'group' }, g); }
 
   /* ---- the completion list (§13.4) and its toggles (§8) ---- */
 
@@ -960,6 +1112,16 @@
     }
     if (name === 'remove') { A.removeTask(id); return; }
     if (name === 'item') { A.toggleItemAt(id, v); return; }
+    // G0 (§8.9): the sheet waits for the rename's answer.
+    if (name === 'renameNote') return A.renameTask(id, v);
+    if (name === 'linkNote') { A.linkNote(id); return; }
+    // G3 (§8.5): the Group row, and "New group…" (create and move in one commit).
+    if (name === 'newGroup') { A.newGroupForm({ task: id }); return; }
+    if (name === 'group') {
+      var gt = taskOf(id), gid = v && M().group(c, v) ? v : null, cur = gt && gt.group && M().group(c, gt.group) ? gt.group : null;
+      if (!gt || gid === cur || !commitEdit(M().moveToGroup(c, id, gid), 'Move to group', id)) { if (S.sheet.isOpen()) S.sheet.update(); }
+      return;
+    }
     if (name === 'openItem') {
       var kid = S.items && S.items.taskId === id ? S.items.list.filter(function (i) { return i.key === v; })[0] : null;
       if (kid && kid.kind === 'child') S.store.flush().then(function () { return S.host.openNote(kid.id, false); });
@@ -969,6 +1131,11 @@
     if (name === 'dates') done = commitEdit(M().setDates(c, id, v.start, v.end), 'Change dates', id, { save: 'debounce' });
     else if (name === 'milestone') done = commitEdit(M().setTask(c, id, { milestone: !!v }), 'Milestone', id, { save: 'debounce' });
     else if (name === 'color') done = commitEdit(M().setTask(c, id, { color: v || null }), 'Colour', id, { save: 'debounce' });
+    else if (name === 'title') {
+      // A note-less task's own title (§8.9.1): saved now, like a gesture.
+      var tt = taskOf(id), nt = GT.sheet.cleanTitle(v);
+      if (tt && !tt.note && nt && nt !== tt.title) done = commitEdit(M().setTask(c, id, { title: nt }), 'Rename', id, { coalesceKey: 'title:' + id });
+    }
     // A commit refreshes the sheet through syncUi; a refused one shows the chart again.
     if (!done && S.sheet.isOpen()) S.sheet.update();
   }
@@ -1014,6 +1181,14 @@
     for (var i = 0; i < rows.length; i++) if (rows[i].kind === 'task' && rows[i].id === id) { row = rows[i]; break; }
     if (!row) return false;
     S.drag = { state: state, id: id, x0: x0, y0: y0, sx0: cam.sx, sy0: cam.sy, top: bodyTop(), mid: row.y + row.h / 2, hd: row.h, res: null, target: null };
+    if (state === 'REORDER') {
+      // Task-groups plan §8.1: the No-group slot row above the first header.
+      // Every row moved down by h and the camera by dy, so the drag's own
+      // centre and start camera follow (nothing moves on screen unless the
+      // list was at its top).
+      var sl = S.view.setDragSlot(true);
+      if (sl) { S.drag.sy0 += sl.dy; S.drag.mid += sl.h; }
+    }
     if (S.sel !== id) A.select(id);
     if (S.sheet.isOpen()) S.sheet.close();
     return true;
@@ -1034,8 +1209,10 @@
         var g = tg.group ? M().group(c, tg.group) : null;
         text = '→ ' + (g ? g.title || T('Untitled') : T('No group'));
       }
+      // G3 (§8.2): a header band, the slot or a collapsed group is highlighted.
       S.view.setPreview({ kind: 'reorder', id: d.id, dy: dy, from: tg ? tg.from : -1, lo: tg ? tg.lo : 0, hi: tg ? tg.hi : -1,
-        dir: tg ? tg.dir : 0, hd: d.hd, bubble: text, bx: bx, by: by });
+        dir: tg ? tg.dir : 0, hd: d.hd, bubble: text, bx: bx, by: by,
+        group: tg ? tg.group : undefined, into: tg ? tg.into : undefined, slot: !!(tg && tg.slot), hidden: !!(tg && tg.hidden), changed: !!(tg && tg.changed) });
       return;
     }
     var dx = (x - d.x0) + (cam.sx - d.sx0);
@@ -1060,11 +1237,14 @@
     var d = S.drag, c = live();
     S.drag = null;
     S.view.setPreview(null);
+    // The slot row goes before the commit rebuilds the rows (§8.1).
+    S.view.setDragSlot(false);
     if (!d || !c || state === 'ARMED') { syncHandles(); return; }
     var done = false;
     if (state === 'REORDER') {
       var tg = d.target;
       if (tg && tg.changed) done = commitEdit(M().reorder(c, d.id, tg.index, tg.group), 'Reorder', d.id);
+      if (done && tg.hidden) movedOutOfSight(tg.group);
     } else if (d.res && d.res.delta) {
       if (state === 'MOVE') done = commitEdit(M().moveTask(c, d.id, d.res.delta), 'Move', d.id);
       else if (state === 'RESIZE_E') done = commitEdit(M().resizeTask(c, d.id, 'end', d.res.end === null ? d.res.start : d.res.end), 'Resize', d.id);
@@ -1076,8 +1256,26 @@
     if (!S.drag && !S.view.preview()) return;
     S.drag = null;
     S.view.setPreview(null);
+    S.view.setDragSlot(false);
+  }
+  /*
+   * G3 (§8.2): a task that went where its row is not shown (a collapsed
+   * group, or an unscheduled task's new group): the header flashes and a
+   * toast names the group, with Undo.
+   */
+  function movedOutOfSight(gid) {
+    if (gid) S.view.flash(gid);
+    // Out of a group into no group: its own words (G3 review round 1).
+    A.toast(gid ? I().fmt('Moved to {group}', { group: groupTitle(gid) }) : T('Removed from its group'), { label: T('Undo'), run: A.undo });
   }
   function longPress(kind, id) {
+    // G3 (§8.3): a long press on a group header opens its sheet (read-only
+    // charts too); the embed and the Unscheduled header keep folding.
+    if (kind === 'group') {
+      var c = live();
+      if (S.launch.embed || !c || !id || id === GT.layout.UNSCHED || !M().group(c, id)) return false;
+      return A.openGroupSheet(id);
+    }
     var t = taskOf(id);
     if (!t || S.launch.embed) return false;
     if (!editable()) { A.select(id); return false; }
@@ -1123,31 +1321,155 @@
     // Focus on a bar or row moves with the selection (M9).
     if (keep) S.view.focusRow('task', rows[n].id);
   };
+  // Alt+Up/Down (§13.2, task-groups plan §8.11): the next slot that changes
+  // the chart, across group boundaries and into collapsed or empty groups.
   A.nudgeOrder = function (dir) {
-    var c = live(), rows = S.view.rows(), from = -1;
-    if (!c || !editable()) return false;
-    for (var i = 0; i < rows.length; i++) if (rows[i].kind === 'task' && rows[i].id === S.sel) from = i;
-    var nb = rows[from + dir];
-    if (from < 0 || !nb) return false;
-    var hd = rows[from].h;
-    var y = dir < 0 ? nb.y + (nb.h + hd) / 2 - 0.5 : nb.y - hd + (nb.h + hd) / 2 + 0.5;
-    var tg = GT.layout.reorderTarget(rows, c, S.sel, y);
+    var c = live();
+    if (!c || !editable() || !taskOf(S.sel)) return false;
+    var tg = GT.layout.stepTarget(S.view.rows(), c, S.sel, dir);
     if (!tg || !tg.changed) return false;
-    return commitEdit(M().reorder(c, S.sel, tg.index, tg.group), 'Reorder', S.sel, { save: 'debounce', coalesceKey: 'key-order:' + S.sel });
+    if (!commitEdit(M().reorder(c, S.sel, tg.index, tg.group), 'Reorder', S.sel, { save: 'debounce', coalesceKey: 'key-order:' + S.sel })) return false;
+    if (tg.hidden) movedOutOfSight(tg.group);
+    return true;
   };
 
   /* ---- chart menus: FAB, More, rename ---- */
 
-  A.addMilestone = function () {
+  /*
+   * G0 (§8.9.1, G14): Add milestone opens a create sheet: Title (empty,
+   * placeholder "Milestone"), Date (the day after the selected task, else
+   * today), Group chips (only on a chart with groups; default the selected
+   * task's group) and Link to a note…. st0 carries what the sheet shows
+   * again after the picker: {title, date, group, note: {id, title}}.
+   */
+  A.addMilestone = function () { return A.milestoneForm(null); };
+  A.milestoneForm = function (st0) {
     var c = live();
     if (!c || !editable()) return false;
-    var res = M().addTasks(c, [{ milestone: true, title: T('Milestone'), start: GT.dates.today(S.now()) }]);
-    var id = res.added && res.added[0];
-    if (!commitEdit(res, 'Add milestone', null)) return false;
-    A.select(id);
-    S.view.scrollIntoView(id);
-    S.view.flash(id);
+    st0 = st0 || {};
+    var pl = placement(), note = st0.note || null;
+    var date = typeof st0.date === 'number' ? st0.date : (typeof pl.from === 'number' ? pl.from : GT.dates.today(S.now()));
+    var fields = [
+      { name: 'title', type: 'text', label: T('Title'), placeholder: T('Milestone'), value: note ? note.title : (st0.title || ''), disabled: !!note },
+      { name: 'date', type: 'date', label: T('Date'), value: date }
+    ];
+    if (c.groups.length) {
+      var g = st0.group !== undefined ? st0.group : pl.group;
+      fields.push({
+        name: 'group', type: 'choice', label: T('Group'), value: g && M().group(c, g) ? g : '',
+        options: [{ value: '', label: T('No group') }].concat(c.groups.map(function (x) { return { value: x.id, label: x.title || T('Untitled') }; }))
+      });
+    }
+    if (note) fields.push({ name: 'note', type: 'note', label: T('Note'), value: note.title || T('Untitled') });
+    S.sheet.openForm({
+      // G0 review 1: opened by touch the Title is not focused, so the soft
+      // keyboard does not cover the chips and Create; from a keyboard it is.
+      kind: 'milestone', title: T('New milestone'), fields: fields, noFocus: !S.kbd,
+      actions: [
+        { id: 'create', label: T('Create'), primary: true, run: function (v) { return A.createMilestone(v, note) ? false : true; } },
+        { id: 'link', label: T('Link to a note…'), run: function (v) { A.pickMilestoneNote(v); return true; } },
+        { id: 'cancel', label: T('Cancel') }
+      ]
+    }, 'full');
+    reg(function () { A.milestoneForm(st0); });
     return true;
+  };
+  // Create from the sheet's values: one commit, one undo entry. -> bool
+  A.createMilestone = function (v, note) {
+    var c = live();
+    if (!c || !editable()) return false;
+    v = v || {};
+    if (note && M().holderOf(c, note.id)) { A.toast(T('Already on this chart')); return false; }
+    var pl = placement();
+    // An empty title is the localised default, stored as is (D13).
+    var title = note ? note.title : (GT.sheet.cleanTitle(v.title) || T('Milestone'));
+    var start = typeof v.date === 'number' ? v.date : (typeof pl.from === 'number' ? pl.from : GT.dates.today(S.now()));
+    var group = v.group && M().group(c, v.group) ? v.group : null;
+    var spec = { milestone: true, title: title, start: start, group: group };
+    if (note) spec.note = note.id;
+    var res = M().addTasks(c, [spec], { index: pl.index });
+    var id = res.added && res.added[0];
+    if (!id || !commitEdit(res, 'Add milestone', id)) return false;
+    // Close first: the sheet hands the focus back (a focused row selects
+    // its task), then the new row is selected.
+    var kb = focusInChart();
+    if (S.sheet.kind() === 'milestone') S.sheet.close();
+    showAdded([id]);
+    if (kb || focusInChart()) S.view.focusRow('task', id);
+    return true;
+  };
+  // Link to a note… in the create sheet: one pick, refused when the note is on the chart.
+  A.pickMilestoneNote = function (v) {
+    var s = S.session, spec = S.sheet.spec();
+    return S.store.flush().then(function () {
+      return S.host.pickNotes({ multiSelect: false, title: T('Link note') });
+    }).then(function (r) {
+      if (S.session !== s || S.sheet.spec() !== spec) return r;
+      if (!r.ok) { A.toast(T(r.reason === 'no_ui' ? 'The note picker is not available here.' : 'The note picker could not be opened.')); return r; }
+      if (r.cancelled || !r.notes.length) return r;
+      var n = r.notes[0], c = live();
+      if (!c) return { ok: false, reason: 'held' };
+      if (M().holderOf(c, n.id)) { A.toast(T('Already on this chart')); return { ok: false, reason: 'clash' }; }
+      A.milestoneForm({ date: v.date, group: v.group, note: { id: n.id, title: n.title } });
+      return { ok: true, note: n };
+    });
+  };
+  /*
+   * Link note… on a note-less milestone (§8.9.1): the clash is checked
+   * first, then one setTask({note, title}) with the picker's title, then
+   * the note's facts are read. Its dates are not written to the note.
+   */
+  A.linkNote = function (id) {
+    var t = taskOf(id), s = S.session;
+    if (!t || t.note || !editable()) return Promise.resolve({ ok: false, reason: 'held' });
+    return S.store.flush().then(function () {
+      return S.host.pickNotes({ multiSelect: false, title: T('Link note') });
+    }).then(function (r) {
+      if (S.session !== s) return r;
+      if (!r.ok) { A.toast(T(r.reason === 'no_ui' ? 'The note picker is not available here.' : 'The note picker could not be opened.')); return r; }
+      if (r.cancelled || !r.notes.length) return r;
+      var n = r.notes[0], c = live();
+      if (!c || !taskOf(id) || taskOf(id).note) return { ok: false, reason: 'held' };
+      if (M().holderOf(c, n.id)) { A.toast(T('Already on this chart')); return { ok: false, reason: 'clash' }; }
+      if (!commitEdit(M().setTask(c, id, { note: n.id, title: n.title }), 'Link note', id)) return { ok: false, reason: 'held' };
+      S.store.resolve(s, { ids: [n.id] });
+      return { ok: true, note: n };
+    });
+  };
+  /*
+   * The Note title field (§8.9.2, G13): renames the task's note, one
+   * approval, one undo entry ("Rename note"); the chart's copy of the
+   * title follows without an undo entry. A denial or failure says so and
+   * the sheet puts the note's title back.
+   */
+  // The task whose note is being renamed (the sheet's busy state), or null.
+  var renaming = null;
+  A.renameTask = function (id, title) {
+    var t = taskOf(id), s = S.session, stack = S.stack;
+    title = GT.sheet.cleanTitle(title);
+    if (!t || !t.note || !title || !editable()) return Promise.resolve({ ok: false, reason: 'held' });
+    if (renaming) return Promise.resolve({ ok: false, reason: 'busy' });
+    renaming = id;
+    return S.store.renameTask(t.note, title).then(function (r) {
+      renaming = null;
+      if (S.session !== s || S.stack !== stack) return { ok: r.ok, reason: 'superseded' };
+      if (r.ok) {
+        stack.push({ label: 'Rename note' + SEP + title, patches: r.inverse });
+        S.store.followTitles();
+        afterChange();
+      } else {
+        A.toast(T(r.reason === 'denied' ? 'The note was not renamed: not approved' : 'The note was not renamed'));
+        syncUi();
+      }
+      return r;
+    }, function (e) { renaming = null; throw e; });
+  };
+  // F2 (§8.11, keyboard only): the task's sheet with its name field focused.
+  A.editName = function (id) {
+    if (!taskOf(id)) return false;
+    if (id !== S.sel) A.select(id);
+    if (S.sheet.taskId() !== id) A.openSheet(id, 'peek');
+    return S.sheet.focusName();
   };
   A.openFab = function () {
     if (!editable()) return;
@@ -1155,7 +1477,9 @@
       title: T('Add'), items: [
         { id: 'existing', label: T('Add existing notes'), run: A.addExisting },
         { id: 'create', label: T('Create a task note'), run: A.createTaskForm },
-        { id: 'milestone', label: T('Add milestone'), run: A.addMilestone }
+        { id: 'milestone', label: T('Add milestone'), run: A.addMilestone },
+        // G3 (§8.4, §8.10).
+        { id: 'group', label: T('Add group'), run: function () { A.newGroupForm(null); } }
       ]
     }, 'peek');
     reg(A.openFab);
@@ -1290,23 +1614,261 @@
    * deleted in the note off the chart (one undo step; the notes are kept);
    * Restore list writes the region again with every line.
    */
-  A.removeGone = function (ids) {
+  // G2 (§6.3): also the groups whose markers were deleted; their held tasks
+  // go to their place in the note (`placement`), or stay ungrouped.
+  A.removeGone = function (ids, groups, placement) {
     var c = live();
     if (!c || !editable()) return false;
     ids = (ids || []).filter(function (id) { return !!taskOf(id); });
-    if (!ids.length) return false;
-    var titles = ids.map(function (id) { return titleOf(id); }), chart = c, inv = [];
-    ids.forEach(function (id) { var r = M().removeTask(chart, id); chart = r.chart; inv = r.inverse.concat(inv); });
-    // The note's region lacks those lines: the save replaces it as it is.
-    S.store.anchorToRead();
-    if (!commitEdit({ chart: chart, inverse: inv }, 'Remove', ids[0])) return false;
+    groups = (groups || []).filter(function (g) { return !!M().group(c, g); });
+    if (!ids.length && !groups.length) return false;
+    var titles = groups.map(function (g) { return I().fmt('{title} (group)', { title: groupTitle(g) }); })
+      .concat(ids.map(function (id) { return titleOf(id); }));
+    var label = labelOf('Remove', ids[0] || null);
+    // One commit in the store (anchored on the read that lacks the lines).
+    var r = S.store.removeGone(ids, groups, placement);
+    if (!r.ok) return false;
+    S.stack.push({ label: label, patches: r.inverse });
+    afterChange();
     if (S.sel && ids.indexOf(S.sel) >= 0) A.select(null);
     A.toast(I().fmt('Removed “{title}” from the chart', { title: I().list(titles) }), { label: T('Undo'), run: A.undo });
+    return true;
+  };
+  // Seed offer (§5.5): Use as groups (one commit, one undo step) or Not now.
+  A.useSeed = function () {
+    var stack = S.stack;
+    return S.store.useSeed().then(function (r) {
+      if (r.ok) stack.push({ label: labelOf('Use as groups'), patches: r.inverse });
+      afterChange();
+      return r;
+    });
+  };
+  A.seedLater = function (hash) {
+    listView().seedHidden = hash;
+    S.store.seedNotNow(hash);
+    noteCamera();
+    syncUi();
+    return true;
+  };
+  // Promote offer (§5.5): Make groups (one commit whose undo restores the
+  // heading lines) or Not now.
+  A.makeGroups = function () {
+    var r = S.store.makeGroups();
+    if (r.ok) S.stack.push({ label: labelOf('Make groups'), patches: r.inverse });
+    afterChange();
+    return r;
+  };
+  A.promoteLater = function (hash) {
+    listView().promoteHidden = hash;
+    noteCamera();
+    syncUi();
+    return true;
+  };
+  // Additions (§6.3): Add each note where the list shows it, one commit.
+  A.addOffered = function (offers) {
+    var s = S.session, stack = S.stack;
+    if (!s || !editable()) return Promise.resolve({ ok: false, reason: 'held' });
+    var notes = (offers || []).map(function (o) {
+      return { id: o.note, title: o.text, group: o.group, after: o.after, owner: o.owner, index: o.index };
+    });
+    return S.store.addToChart(s.noteId, notes).then(function (r) {
+      if (S.session !== s) return r;
+      if (!r.ok) { A.toast(T('The notes were not added.')); return r; }
+      if (r.added.length) {
+        stack.push({ label: labelOf('Add notes', r.added[0]), patches: r.inverse });
+        afterChange();
+        showAdded(r.added);
+      }
+      return r;
+    });
+  };
+  A.offersLater = function (offers) {
+    var lv = listView();
+    (offers || []).forEach(function (o) { if (lv.dismissed.indexOf(o.note) < 0) lv.dismissed.push(o.note); });
+    noteCamera();
+    syncUi();
     return true;
   };
   A.restoreList = function () {
     return S.store.restoreMirror().then(function (r) { syncUi(); return r; });
   };
+  // Missing list heading (task-groups plan §5.6): the banner's actions.
+  A.restoreHeading = function () {
+    return S.store.restoreHeading().then(function (r) {
+      if (!r.ok && r.reason === 'denied') A.toast(T('Not changed: not approved'));
+      else if (!r.ok && r.reason === 'conflict' && r.conflicts && r.conflicts.length) conflictSheet('save', r.conflicts);
+      afterChange();
+      return r;
+    });
+  };
+  A.useListHeading = function () {
+    return S.store.useListHeading().then(function (r) {
+      if (r.ok) S.stack.push({ label: labelOf('Task list heading'), patches: r.inverse });
+      afterChange();
+      return r;
+    });
+  };
+  A.listOff = function () {
+    var c = live();
+    if (!c || !editable()) return false;
+    return commitEdit(M().setSettings(c, { mirror: false }), 'Turn list off');
+  };
+
+  /* ---- G3: group management (task-groups plan §8.3 to §8.6, §8.11) ---- */
+
+  // An undo label that names a group.
+  function groupLabel(action, gid) { return action + SEP + groupTitle(gid); }
+  // The group sheet's view model (sheet.js ctx.group).
+  function groupVm(id) {
+    var c = live(), g = c && id ? M().group(c, id) : null;
+    if (!g) return null;
+    var i = c.groups.indexOf(g), conf = GT.block.listConf(c);
+    return {
+      id: id, title: g.title || T('Untitled'), name: g.title, hue: groupHue(c, g), color: g.color,
+      collapsed: S.collapsed.indexOf(id) >= 0, readOnly: !editable(), first: i === 0, last: i === c.groups.length - 1,
+      // §5.7: a group titled like the list heading is allowed, with a hint.
+      heading: conf.on && conf.h ? conf.h : ''
+    };
+  }
+  function groupAct(name, id, v) {
+    if (name === 'create') return A.createGroup(v, S.sheet.spec());
+    if (name === 'collapse') { if (!live() || !M().group(live(), id)) return false; A.toggleGroup(id); S.sheet.update(); return true; }
+    var c = live();
+    if (!c || !M().group(c, id)) return false;
+    if (name === 'title') return commitEdit(M().renameGroup(c, id, v), 'Rename group', null, { save: 'debounce', coalesceKey: 'gtitle:' + id, label: 'Rename group' + SEP + v });
+    if (name === 'color') return commitEdit(M().renameGroup(c, id, undefined, v || null), 'Group colour', null, { save: 'debounce', label: groupLabel('Group colour', id) });
+    if (name === 'move') return A.moveGroupBy(id, v);
+    if (name === 'delete') return A.deleteGroup(id);
+    return false;
+  }
+  A.groupAct = groupAct;
+  /*
+   * openGroupSheet(gid, {armDelete, back}): the group sheet (§8.3), FULL.
+   * back ({kind: 'task', id, det} or {kind: 'groups', det}) is where closing
+   * it returns to; a long press or a key on a header returns nowhere.
+   */
+  A.openGroupSheet = function (gid, o) {
+    o = o || {};
+    var c = live();
+    if (S.launch.embed || !c || !M().group(c, gid)) return false;
+    S.groupBack = o.back || null;
+    if (S.drag) cancelDrag();
+    return S.sheet.openGroup(gid, 'full', { armDelete: !!o.armDelete && editable() });
+  };
+  // Keyboard Delete on a header (§8.11): the sheet with Delete armed; a
+  // second Delete (from the sheet's title) deletes.
+  A.askDeleteGroup = function (gid) {
+    if (!editable() || !live() || !M().group(live(), gid)) return false;
+    if (S.sheet.groupId() === gid && S.sheet.deleteArmed()) return A.deleteGroup(gid);
+    if (S.sheet.groupId() !== gid) A.openGroupSheet(gid, { armDelete: true });
+    return S.sheet.armDelete();
+  };
+  /*
+   * newGroupForm({task, back}): the group sheet in create mode (§8.4). With
+   * task, Create also moves that task into the new group (the task sheet's
+   * "New group…"); closing returns to where it came from.
+   */
+  A.newGroupForm = function (o) {
+    o = o || {};
+    if (!live() || !editable()) return false;
+    if (o.task && taskOf(o.task)) S.groupBack = { kind: 'task', id: o.task, det: S.sheet.detent() || 'peek' };
+    else S.groupBack = o.back || null;
+    var conf = GT.block.listConf(live());
+    return S.sheet.openGroup(null, 'full', { create: true, task: o.task || null, heading: conf.on && conf.h ? conf.h : '' });
+  };
+  /*
+   * createGroup(title, spec) -> bool: one commit. The group goes after the
+   * selected task's group, else at the end; with spec.task it is "Move to
+   * new group" (the task moves in, one undo entry). The header is scrolled
+   * into view and flashes.
+   */
+  A.createGroup = function (title, spec) {
+    var c = live();
+    title = GT.sheet.cleanTitle(title);
+    if (!c || !editable() || !title) return false;
+    var forTask = spec && spec.task && taskOf(spec.task) ? spec.task : null;
+    var sel = taskOf(forTask || S.sel), gi = sel && sel.group ? c.groups.map(function (g) { return g.id; }).indexOf(sel.group) : -1;
+    var add = M().addGroup(c, { title: title }, gi >= 0 ? gi + 1 : c.groups.length), res = add, done;
+    if (forTask) {
+      var mv = M().moveToGroup(add.chart, forTask, add.id);
+      res = { chart: mv.chart, inverse: mv.inverse.concat(add.inverse) };
+      done = commitEdit(res, 'Move to new group', forTask);
+    } else done = commitEdit(res, 'Add group', null, { label: 'Add group' + SEP + title });
+    if (!done) return false;
+    var back = S.groupBack;
+    S.groupBack = null;
+    if (back && back.kind === 'task' && taskOf(back.id)) S.sheet.openTask(back.id, back.det);
+    else if (back && back.kind === 'groups') A.openGroups(back.det, { id: add.id });
+    else if (S.sheet.kind() === 'group-new') S.sheet.close();
+    showGroup(add.id);
+    return true;
+  };
+  // Scroll a group header into view (the camera only) and flash it.
+  function showGroup(gid) {
+    var rows = S.view.rows(), vs = S.view.viewSize(), cam = S.view.camera(), row = null;
+    for (var i = 0; i < rows.length; i++) if (rows[i].kind === 'group' && rows[i].id === gid) row = rows[i];
+    if (!row) return false;
+    if (row.y < cam.sy || row.y + row.h > cam.sy + vs.bodyH) S.view.setCamera({ sx: cam.sx, sy: Math.max(0, row.y - vs.bodyH / 3), ppd: cam.ppd });
+    S.view.flash(gid);
+    noteCamera();
+    return true;
+  }
+  A.showGroup = showGroup;
+  // Move up / Move down (§8.3, §8.6; Alt+Up/Down on a header): one undo
+  // entry, a debounced save, coalesced per group like key-order.
+  A.moveGroupBy = function (gid, dir) {
+    var c = live();
+    if (!c || !editable()) return false;
+    var i = c.groups.map(function (g) { return g.id; }).indexOf(gid);
+    if (i < 0 || !dir) return false;
+    return commitEdit(M().moveGroup(c, gid, i + dir), 'Move group', null, { save: 'debounce', coalesceKey: 'gorder:' + gid, label: groupLabel('Move group', gid) });
+  };
+  // Delete group (§8.3): its tasks become ungrouped; a toast offers Undo.
+  A.deleteGroup = function (gid) {
+    var c = live();
+    if (!c || !editable() || !M().group(c, gid)) return false;
+    var title = groupTitle(gid);
+    if (!commitEdit(M().removeGroup(c, gid), 'Delete group', null, { label: groupLabel('Delete group', gid) })) return false;
+    if (S.sheet.groupId() === gid) S.sheet.close();
+    A.toast(I().fmt('Deleted group “{title}”. Its tasks are now ungrouped.', { title: title }), { label: T('Undo'), run: A.undo });
+    return true;
+  };
+  /*
+   * More > Groups (§8.6): every group with its count and colour, Move up and
+   * Move down per row, and Add group. A row opens its group sheet, whose
+   * close comes back here. focus {id, dir}: the row (or its arrow) to focus.
+   */
+  A.openGroups = function (detent, focus) {
+    var c = live();
+    if (!c) return false;
+    var ed = editable();
+    var rows = c.groups.map(function (g, i) {
+      var n = c.tasks.filter(function (t) { return t.group === g.id; }).length, title = g.title || T('Untitled');
+      return { id: g.id, title: title, hue: groupHue(c, g), meta: I().fmt('{n} task(s)', { n: n }), aria: I().fmt('{title}, {n} task(s)', { title: title, n: n }),
+        first: i === 0, last: i === c.groups.length - 1 };
+    });
+    S.sheet.openGroups({
+      kind: 'groups', title: T('Groups'), rows: rows, readOnly: !ed, focus: focus || null,
+      open: function (id) { A.openGroupSheet(id, { back: { kind: 'groups', det: S.sheet.detent() } }); },
+      move: function (id, dir) { var det = S.sheet.detent(); if (A.moveGroupBy(id, dir)) A.openGroups(det, { id: id, dir: dir }); },
+      add: function () { A.newGroupForm({ back: { kind: 'groups', det: S.sheet.detent() } }); }
+    }, detent || 'full');
+    reg(function (det) { A.openGroups(det); });
+    return true;
+  };
+  // Collapsed ids of groups that no longer exist are dropped (§8.7) at
+  // open and after a fold (a group kept by a fold until its banner is
+  // answered still exists, so it keeps its state). Not after a delete: the
+  // id stays until the next open, so the delete's Undo brings the group
+  // back as it was (G3 review round 1).
+  function pruneCollapsed(c) {
+    if (!c) return false;
+    var keep = S.collapsed.filter(function (id) { return id === GT.layout.UNSCHED || !!M().group(c, id); });
+    if (keep.length === S.collapsed.length) return false;
+    S.collapsed = keep;
+    noteCamera();
+    return true;
+  }
 
   // Remove from chart (§8): the chart only, never the note; an undo toast.
   A.removeTask = function (id) {
@@ -1326,6 +1888,8 @@
         { id: 'fit', label: T('Fit all'), run: A.fitAll },
         { id: 'expand', label: T('Expand all'), run: function () { A.setAllGroups(false); } },
         { id: 'collapse', label: T('Collapse all'), run: function () { A.setAllGroups(true); } },
+        // G3 (§8.6, §8.10): every group, the screen-reader route to their actions.
+        { id: 'groups', label: T('Groups'), run: function () { A.openGroups(); } },
         { id: 'legend', label: 'ⓘ ' + T('Legend'), hint: T(legendOn() ? 'On' : 'Off'), run: A.toggleLegend },
         { id: 'display', label: T('Display'), run: A.openDisplay },
         { id: 'settings', label: T('Chart settings'), run: A.openSettings },
@@ -1481,6 +2045,8 @@
   /* ---- M8: chart settings (§5.4, §13.5; undoable and saved, §13.6) ---- */
 
   var WEEKDAY0 = 3;               // day number 3 (1970-01-04) is a Sunday
+  // The list heading in force (a legacy chart gets the locale's on its next save).
+  function listHeadingOf(set) { return GT.block.listConf({ settings: set }).h || GT.md.defaultListHeading(S.host.locale()); }
   function settingsFields(set) {
     var I0 = I(), ws = I0.weekStart(set), days = [];
     for (var k = 0; k < 7; k++) {
@@ -1509,7 +2075,13 @@
       { name: 'workdays', type: 'days', label: T('Working days'), value: (set.workdays || []).slice(), options: days },
       { name: 'holidays', type: 'dates', label: T('Holidays'), addLabel: T('Add holiday'),
         value: (set.holidays || []).map(GT.dates.parse).filter(function (x) { return typeof x === 'number'; }) },
-      { name: 'mirror', type: 'switch', label: T('Readable task list in the note'), value: set.mirror !== false },
+      { name: 'mirror', type: 'switch', label: T('Task list above the chart'), value: set.mirror !== false },
+      // G3 (task-groups plan §5.2.1, §5.7): the list heading's text and level.
+      // Shown only while the list is on (review round 1).
+      { name: 'listHeading', type: 'text', label: T('Task list heading'), value: listHeadingOf(set), placeholder: GT.md.defaultListHeading(S.host.locale()),
+        showIf: { name: 'mirror', value: true } },
+      { name: 'listLevel', type: 'choice', label: T('Heading level'), value: GT.block.listConf({ settings: set }).L,
+        options: [1, 2, 3, 4, 5].map(function (n) { return { value: n, label: String(n) }; }), showIf: { name: 'mirror', value: true } },
       { name: 'embed', type: 'switch', label: T('Show the chart inside the note'), value: !!set.embed },
       { name: 'syncDates', type: 'switch', label: T('Write dates to task notes (shows in Calendar)'), value: !!set.syncDates }
     ];
@@ -1548,9 +2120,10 @@
       v = String(v == null ? '' : v).trim();
       if (GT.md.normHeading(v) === GT.md.normHeading(c.settings.progressSection)) return false;
     } else if (key === 'workdays') v = (v || []).slice().sort();
+    else if (key === 'listHeading' || key === 'listLevel') return setListHeading(key, v);
     var f = {};
     f[key] = v;
-    var bursty = key === 'workdays' || key === 'holidays' || key === 'progressSection';
+    var bursty = key === 'workdays' || key === 'holidays' || key === 'progressSection' || key === 'listHeading';
     var res = M().setSettings(c, f), shown = S.settingsShown;
     // The open sheet already shows this value: no rebuild after the commit.
     S.settingsShown = GT.model.stable(GT.model.settingsData(res.chart.settings));
@@ -1558,6 +2131,32 @@
     if (!done) S.settingsShown = shown;
     return done;
   };
+  /*
+   * The list heading's text and level (task-groups plan §5.2.1; G3 review
+   * round 1) go through store.setListHeading: one commit whose save rewrites
+   * the region under the new heading, while reads before that save still
+   * find the note's current heading. An empty heading is refused (the list
+   * needs one) and the field shows the heading again.
+   */
+  function setListHeading(key, v) {
+    var c = live(), o = {};
+    if (key === 'listHeading') o.heading = GT.sheet.cleanTitle(v);
+    else o.level = Number(v);
+    var r = key === 'listHeading' && !o.heading ? { ok: false, reason: 'invalid' } : S.store.setListHeading(o);
+    if (!r.ok) {
+      var hi = doc.querySelector('#sheet [data-field="listHeading"] input');
+      if (hi && c) hi.value = listHeadingOf(c.settings);
+      if (r.reason === 'invalid') A.toast(T('The task list needs a heading'));
+      else if (r.reason === 'held') A.toast(T('This chart can’t be edited right now.'));
+      if (r.reason !== 'same') refreshSettings();
+      return false;
+    }
+    // The open sheet already shows this value: no rebuild after the commit.
+    S.settingsShown = GT.model.stable(GT.model.settingsData(live().settings));
+    S.stack.push({ label: labelOf('Chart settings'), patches: r.inverse, coalesceKey: key === 'listHeading' ? 'settings:listHeading' : null });
+    afterChange();
+    return true;
+  }
   // An undo, redo or merge changed the settings under an open settings sheet.
   function refreshSettings() {
     var c = live();
@@ -1786,7 +2385,8 @@
 
   /* ---- the save UI: pill, notice, banners, conflicts (§9.1, §9.4) ---- */
 
-  var PILL = A.PILL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved changes. Tap to save', 'not-saved': 'Not saved. Tap to save' };
+  var PILL = A.PILL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Unsaved changes. Tap to save', 'not-saved': 'Not saved. Tap to save',
+    'heading-missing': 'Restore the task list heading to save' };
   function updatePill() {
     var p = $('pill'), s = S.session;
     if (!p) return;
@@ -1845,7 +2445,7 @@
     updatePill();
     updateToolbar();
     if (S.mode === 'chart') syncHandles();
-    if (S.sheet && S.sheet.taskId()) S.sheet.update();
+    if (S.sheet && (S.sheet.taskId() || S.sheet.groupId())) S.sheet.update();
     // §9.1.3: the notice shows when an editable chart first opens, before
     // any edit can start a save (M6 review round 1).
     if (editable()) noticeCheck();
@@ -1892,6 +2492,9 @@
       t.appendChild(b);
     }
     t.hidden = false;
+    // G2 review: above the legend when it shows, so it never covers it.
+    var lg = $('legend');
+    t.style.bottom = lg && !lg.hidden ? (win.innerHeight - lg.getBoundingClientRect().top + 8) + 'px' : '';
     if (toastTimer !== null) win.clearTimeout(toastTimer);
     toastTimer = win.setTimeout(function () { toastTimer = null; t.hidden = true; }, action ? 6000 : 3000);
   };
@@ -2026,6 +2629,18 @@
     // M9 focus (§15.2): a task sheet opened from the Task list goes back to
     // the list with its row focused.
     if (kind === 'task' && S.fromList) { S.fromList = false; if (live()) { A.openTaskList(null, id); return; } }
+    // G3: a group sheet opened from the task sheet or More > Groups goes back there.
+    if (kind === 'group' || kind === 'group-new') {
+      var gb = S.groupBack;
+      S.groupBack = null;
+      if (gb && live()) {
+        if (gb.kind === 'task' && taskOf(gb.id)) { S.sheet.openTask(gb.id, gb.det || 'peek'); return; }
+        if (gb.kind === 'groups') { A.openGroups(gb.det, id && M().group(live(), id) ? { id: id } : null); return; }
+      }
+      // Focus back on the header, also when its pooled element now shows another group.
+      var ga = doc.activeElement;
+      if (kind === 'group' && id && ga && ga.closest && ga.closest('#gantt .g-grp') && ga.getAttribute('data-group') !== id && live() && M().group(live(), id)) { S.view.focusRow('group', id); return; }
+    }
     // Focus went back to a pooled row that now shows another task (the
     // column scrolled while the sheet was open): focus the task's own row.
     var a = doc.activeElement;
@@ -2163,8 +2778,25 @@
       // Delete asks to remove (§13.2); its sheet takes focus on its title, so
       // the second press comes from there.
       var onTitle = !!(t && t.closest && t.closest('#sheet .sh-title'));
+      // G3 (§8.11): on a focused group header Delete opens its sheet with
+      // Delete armed (a second Delete from the sheet's title deletes), and
+      // Shift+Enter or F2 open the sheet. Not for the Unscheduled header.
+      var hr = rowOf(t), hg = hr && hr.kind === 'group' && hr.id !== GT.layout.UNSCHED ? hr.id : null;
+      if ((k === 'Delete' || k === 'Backspace') && !S.launch.embed) {
+        var gdel = hg || (onTitle ? S.sheet.groupId() : null);
+        if (gdel) { A.askDeleteGroup(gdel); e.preventDefault(); return; }
+      }
+      if (hg && !S.launch.embed && (k === 'F2' || (k === 'Enter' && e.shiftKey))) { A.openGroupSheet(hg); e.preventDefault(); return; }
       if ((k === 'Delete' || k === 'Backspace') && S.sel && !S.launch.embed && (!control || onTitle)) {
         A.askRemove(S.sel);
+        e.preventDefault();
+        return;
+      }
+      // G0 F2 (§8.11): rename the focused or selected task from its sheet.
+      if (k === 'F2' && !S.launch.embed && (!control || onTitle)) {
+        var fr = rowOf(t), fid = fr && fr.kind === 'task' ? fr.id : S.sel;
+        if (!fid || !taskOf(fid)) return;
+        A.editName(fid);
         e.preventDefault();
         return;
       }
@@ -2177,7 +2809,9 @@
       var rw = rowOf(t);
       if (rw) {
         if (k === 'ArrowDown' || k === 'ArrowUp') {
-          if (e.altKey && rw.kind === 'task') { A.nudgeOrder(k === 'ArrowDown' ? 1 : -1); S.view.focusRow('task', S.sel || rw.id); }
+          if (e.altKey && rw.kind === 'task') { A.nudgeOrder(k === 'ArrowDown' ? 1 : -1); focusTask(S.sel || rw.id); }
+          // G3: Alt+Up/Down on a header moves the group.
+          else if (e.altKey && rw.kind === 'group') { if (rw.id !== GT.layout.UNSCHED) A.moveGroupBy(rw.id, k === 'ArrowDown' ? 1 : -1); S.view.focusRow('group', rw.id); }
           else A.moveFocus(k === 'ArrowDown' ? 1 : -1, rw);
           e.preventDefault();
           return;
@@ -2203,7 +2837,7 @@
       }
       if (k === 'ArrowUp' || k === 'ArrowDown') {
         var dy = k === 'ArrowDown' ? 1 : -1;
-        if (e.altKey) { var had = focusInChart(); A.nudgeOrder(dy); if (had && S.sel) S.view.focusRow('task', S.sel); } else A.selectNext(dy);
+        if (e.altKey) { var had = focusInChart(); A.nudgeOrder(dy); if (had && S.sel) focusTask(S.sel); } else A.selectNext(dy);
         e.preventDefault();
         return;
       }
@@ -2279,7 +2913,8 @@
     lastBanner = '';
     if (S.mode !== 'chart' && S.redraw) S.redraw();
     if (S.sheet.isOpen()) {
-      if (S.sheet.kind() === 'task') S.sheet.relabel();
+      var sk = S.sheet.kind();
+      if (sk === 'task' || sk === 'group' || sk === 'group-new') S.sheet.relabel();
       else if (S.again && S.againSpec === S.sheet.spec()) S.sheet.relabel(S.again);
     }
     if (S.noticeShown && !$('notice').hidden) { var nt = $('notice').querySelector('.n-text'), nb = $('notice').querySelector('button'); if (nt) nt.textContent = A.noticeText(); if (nb) nb.textContent = T('Got it'); }
@@ -2335,7 +2970,8 @@
         text: T, fmt: function (k, v) { return I().fmt(k, v); },
         day: function (d) { return GT.dates.format(d); },
         parse: function (v) { return v ? GT.dates.parse(v) : null; },
-        task: taskVm, act: sheetAct, onClose: onSheetClose, colors: GT.model.COLORS
+        task: taskVm, act: sheetAct, onClose: onSheetClose, colors: GT.model.COLORS,
+        group: groupVm, groupAct: groupAct
       }
     });
     function onLive() {
@@ -2356,6 +2992,8 @@
     H.on('themechanged', function (v) { GT.theme.setHostTheme(v); });
     // A resume read the chart note (M9): the reconciliation banner may change.
     store.on('read', syncUi);
+    // G2: a fold at open or on a silent reload (the toast, once per state).
+    store.on('list', function () { if (pruneCollapsed(live())) S.view.setCollapsed(S.collapsed.slice()); showFoldToast(); });
     H.on('localechanged', function (v) { A.setLocale(v || H.locale()); });
     H.on('spacechanged', function () { if (S.mode === 'home') A.showHome(); });
 
@@ -2408,7 +3046,7 @@
       if (route.kind === 'multi') return A.showMulti(L.notes.map(function (n) { return { id: n.id, title: n.title }; }));
       if (route.kind === 'chooser') return A.showChooser(route.noteId, title);
       // chart, embed and resolve go straight to the store (M3a contract).
-      return A.openChart({ noteId: route.noteId, read: route.read || null, title: title });
+      return A.openChart({ noteId: route.noteId, read: route.read || null, text: typeof route.text === 'string' ? route.text : undefined, title: title });
     }).then(function () {
       S.booted = true;
       doc.documentElement.classList.remove('boot');

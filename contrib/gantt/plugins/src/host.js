@@ -232,7 +232,10 @@
     if (first.blockScope) return { kind: 'resolve', noteId: first.id, read: null, needsRead: true };
     var fr = B ? B.read(str(first.content)) : null;
     var isChart = !!fr && fr.status !== 'none';
-    return { kind: isChart ? 'chart' : 'chooser', noteId: first.id, read: isChart ? fr : null, needsRead: false };
+    var out = { kind: isChart ? 'chart' : 'chooser', noteId: first.id, read: isChart ? fr : null, needsRead: false };
+    // The store reads the text again with the task list gate (G1).
+    if (isChart) out.text = str(first.content);
+    return out;
   }
 
   /* ------------------------------------------------------ host instances */

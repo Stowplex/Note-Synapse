@@ -1,0 +1,2447 @@
+{
+ "v": 1,
+ "groups": [
+  {
+   "id": "g0",
+   "title": "Discovery"
+  },
+  {
+   "id": "g1",
+   "title": "Design"
+  },
+  {
+   "id": "g2",
+   "title": "Build"
+  },
+  {
+   "id": "g3",
+   "title": "Test"
+  },
+  {
+   "id": "g4",
+   "title": "Docs"
+  },
+  {
+   "id": "g5",
+   "title": "Beta"
+  },
+  {
+   "id": "g6",
+   "title": "Launch"
+  },
+  {
+   "id": "g7",
+   "title": "Support"
+  },
+  {
+   "id": "g8",
+   "title": "Review"
+  },
+  {
+   "id": "g9",
+   "title": "Retro"
+  }
+ ],
+ "tasks": [
+  {
+   "id": "t000",
+   "note": "b3-note-000",
+   "title": "Task 000",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g0"
+  },
+  {
+   "id": "t001",
+   "note": "b3-note-001",
+   "title": "Task 001",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g0"
+  },
+  {
+   "id": "t002",
+   "note": "b3-note-002",
+   "title": "Task 002",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g0"
+  },
+  {
+   "id": "t003",
+   "note": "b3-note-003",
+   "title": "Task 003",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g0"
+  },
+  {
+   "id": "t004",
+   "note": "b3-note-004",
+   "title": "Task 004",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g0"
+  },
+  {
+   "id": "t005",
+   "note": "b3-note-005",
+   "title": "Task 005",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g0"
+  },
+  {
+   "id": "t006",
+   "note": "b3-note-006",
+   "title": "Task 006",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g0"
+  },
+  {
+   "id": "t007",
+   "note": "b3-note-007",
+   "title": "Task 007",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g0"
+  },
+  {
+   "id": "t008",
+   "note": "b3-note-008",
+   "title": "Task 008",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g0"
+  },
+  {
+   "id": "t009",
+   "note": "b3-note-009",
+   "title": "Task 009",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g0"
+  },
+  {
+   "id": "t010",
+   "note": "b3-note-010",
+   "title": "Task 010",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g0"
+  },
+  {
+   "id": "t011",
+   "note": "b3-note-011",
+   "title": "Task 011",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g0"
+  },
+  {
+   "id": "t012",
+   "note": "b3-note-012",
+   "title": "Task 012",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g0"
+  },
+  {
+   "id": "t013",
+   "note": "b3-note-013",
+   "title": "Task 013",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g0"
+  },
+  {
+   "id": "t014",
+   "note": "b3-note-014",
+   "title": "Task 014",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g0"
+  },
+  {
+   "id": "t015",
+   "note": "b3-note-015",
+   "title": "Task 015",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g0"
+  },
+  {
+   "id": "t016",
+   "note": "b3-note-016",
+   "title": "Task 016",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g0"
+  },
+  {
+   "id": "t017",
+   "note": "b3-note-017",
+   "title": "Task 017",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g0"
+  },
+  {
+   "id": "t018",
+   "note": "b3-note-018",
+   "title": "Task 018",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g0"
+  },
+  {
+   "id": "t019",
+   "note": "b3-note-019",
+   "title": "Task 019",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g0"
+  },
+  {
+   "id": "t020",
+   "note": "b3-note-020",
+   "title": "Task 020",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g0"
+  },
+  {
+   "id": "t021",
+   "note": "b3-note-021",
+   "title": "Task 021",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g0"
+  },
+  {
+   "id": "t022",
+   "note": "b3-note-022",
+   "title": "Task 022",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g0"
+  },
+  {
+   "id": "t023",
+   "note": "b3-note-023",
+   "title": "Task 023",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g0"
+  },
+  {
+   "id": "t024",
+   "note": "b3-note-024",
+   "title": "Task 024",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g0"
+  },
+  {
+   "id": "t025",
+   "note": "b3-note-025",
+   "title": "Task 025",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g0"
+  },
+  {
+   "id": "t026",
+   "note": "b3-note-026",
+   "title": "Task 026",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g0"
+  },
+  {
+   "id": "t027",
+   "note": "b3-note-027",
+   "title": "Task 027",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g0"
+  },
+  {
+   "id": "t028",
+   "note": "b3-note-028",
+   "title": "Task 028",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g0"
+  },
+  {
+   "id": "t029",
+   "note": "b3-note-029",
+   "title": "Task 029",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g0"
+  },
+  {
+   "id": "t030",
+   "note": "b3-note-030",
+   "title": "Task 030",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g1"
+  },
+  {
+   "id": "t031",
+   "note": "b3-note-031",
+   "title": "Task 031",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g1"
+  },
+  {
+   "id": "t032",
+   "note": "b3-note-032",
+   "title": "Task 032",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g1"
+  },
+  {
+   "id": "t033",
+   "note": "b3-note-033",
+   "title": "Task 033",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g1"
+  },
+  {
+   "id": "t034",
+   "note": "b3-note-034",
+   "title": "Task 034",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g1"
+  },
+  {
+   "id": "t035",
+   "note": "b3-note-035",
+   "title": "Task 035",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g1"
+  },
+  {
+   "id": "t036",
+   "note": "b3-note-036",
+   "title": "Task 036",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g1"
+  },
+  {
+   "id": "t037",
+   "note": "b3-note-037",
+   "title": "Task 037",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g1"
+  },
+  {
+   "id": "t038",
+   "note": "b3-note-038",
+   "title": "Task 038",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g1"
+  },
+  {
+   "id": "t039",
+   "note": "b3-note-039",
+   "title": "Task 039",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g1"
+  },
+  {
+   "id": "t040",
+   "note": "b3-note-040",
+   "title": "Task 040",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g1"
+  },
+  {
+   "id": "t041",
+   "note": "b3-note-041",
+   "title": "Task 041",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g1"
+  },
+  {
+   "id": "t042",
+   "note": "b3-note-042",
+   "title": "Task 042",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g1"
+  },
+  {
+   "id": "t043",
+   "note": "b3-note-043",
+   "title": "Task 043",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g1"
+  },
+  {
+   "id": "t044",
+   "note": "b3-note-044",
+   "title": "Task 044",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g1"
+  },
+  {
+   "id": "t045",
+   "note": "b3-note-045",
+   "title": "Task 045",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g1"
+  },
+  {
+   "id": "t046",
+   "note": "b3-note-046",
+   "title": "Task 046",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g1"
+  },
+  {
+   "id": "t047",
+   "note": "b3-note-047",
+   "title": "Task 047",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g1"
+  },
+  {
+   "id": "t048",
+   "note": "b3-note-048",
+   "title": "Task 048",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g1"
+  },
+  {
+   "id": "t049",
+   "note": "b3-note-049",
+   "title": "Task 049",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g1"
+  },
+  {
+   "id": "t050",
+   "note": "b3-note-050",
+   "title": "Task 050",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g1"
+  },
+  {
+   "id": "t051",
+   "note": "b3-note-051",
+   "title": "Task 051",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g1"
+  },
+  {
+   "id": "t052",
+   "note": "b3-note-052",
+   "title": "Task 052",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g1"
+  },
+  {
+   "id": "t053",
+   "note": "b3-note-053",
+   "title": "Task 053",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g1"
+  },
+  {
+   "id": "t054",
+   "note": "b3-note-054",
+   "title": "Task 054",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g1"
+  },
+  {
+   "id": "t055",
+   "note": "b3-note-055",
+   "title": "Task 055",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g1"
+  },
+  {
+   "id": "t056",
+   "note": "b3-note-056",
+   "title": "Task 056",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g1"
+  },
+  {
+   "id": "t057",
+   "note": "b3-note-057",
+   "title": "Task 057",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g1"
+  },
+  {
+   "id": "t058",
+   "note": "b3-note-058",
+   "title": "Task 058",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g1"
+  },
+  {
+   "id": "t059",
+   "note": "b3-note-059",
+   "title": "Task 059",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g1"
+  },
+  {
+   "id": "t060",
+   "note": "b3-note-060",
+   "title": "Task 060",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g2"
+  },
+  {
+   "id": "t061",
+   "note": "b3-note-061",
+   "title": "Task 061",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g2"
+  },
+  {
+   "id": "t062",
+   "note": "b3-note-062",
+   "title": "Task 062",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g2"
+  },
+  {
+   "id": "t063",
+   "note": "b3-note-063",
+   "title": "Task 063",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g2"
+  },
+  {
+   "id": "t064",
+   "note": "b3-note-064",
+   "title": "Task 064",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g2"
+  },
+  {
+   "id": "t065",
+   "note": "b3-note-065",
+   "title": "Task 065",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g2"
+  },
+  {
+   "id": "t066",
+   "note": "b3-note-066",
+   "title": "Task 066",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g2"
+  },
+  {
+   "id": "t067",
+   "note": "b3-note-067",
+   "title": "Task 067",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g2"
+  },
+  {
+   "id": "t068",
+   "note": "b3-note-068",
+   "title": "Task 068",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g2"
+  },
+  {
+   "id": "t069",
+   "note": "b3-note-069",
+   "title": "Task 069",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g2"
+  },
+  {
+   "id": "t070",
+   "note": "b3-note-070",
+   "title": "Task 070",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g2"
+  },
+  {
+   "id": "t071",
+   "note": "b3-note-071",
+   "title": "Task 071",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g2"
+  },
+  {
+   "id": "t072",
+   "note": "b3-note-072",
+   "title": "Task 072",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g2"
+  },
+  {
+   "id": "t073",
+   "note": "b3-note-073",
+   "title": "Task 073",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g2"
+  },
+  {
+   "id": "t074",
+   "note": "b3-note-074",
+   "title": "Task 074",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g2"
+  },
+  {
+   "id": "t075",
+   "note": "b3-note-075",
+   "title": "Task 075",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g2"
+  },
+  {
+   "id": "t076",
+   "note": "b3-note-076",
+   "title": "Task 076",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g2"
+  },
+  {
+   "id": "t077",
+   "note": "b3-note-077",
+   "title": "Task 077",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g2"
+  },
+  {
+   "id": "t078",
+   "note": "b3-note-078",
+   "title": "Task 078",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g2"
+  },
+  {
+   "id": "t079",
+   "note": "b3-note-079",
+   "title": "Task 079",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g2"
+  },
+  {
+   "id": "t080",
+   "note": "b3-note-080",
+   "title": "Task 080",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g2"
+  },
+  {
+   "id": "t081",
+   "note": "b3-note-081",
+   "title": "Task 081",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g2"
+  },
+  {
+   "id": "t082",
+   "note": "b3-note-082",
+   "title": "Task 082",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g2"
+  },
+  {
+   "id": "t083",
+   "note": "b3-note-083",
+   "title": "Task 083",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g2"
+  },
+  {
+   "id": "t084",
+   "note": "b3-note-084",
+   "title": "Task 084",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g2"
+  },
+  {
+   "id": "t085",
+   "note": "b3-note-085",
+   "title": "Task 085",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g2"
+  },
+  {
+   "id": "t086",
+   "note": "b3-note-086",
+   "title": "Task 086",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g2"
+  },
+  {
+   "id": "t087",
+   "note": "b3-note-087",
+   "title": "Task 087",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g2"
+  },
+  {
+   "id": "t088",
+   "note": "b3-note-088",
+   "title": "Task 088",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g2"
+  },
+  {
+   "id": "t089",
+   "note": "b3-note-089",
+   "title": "Task 089",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g2"
+  },
+  {
+   "id": "t090",
+   "note": "b3-note-090",
+   "title": "Task 090",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g3"
+  },
+  {
+   "id": "t091",
+   "note": "b3-note-091",
+   "title": "Task 091",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g3"
+  },
+  {
+   "id": "t092",
+   "note": "b3-note-092",
+   "title": "Task 092",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g3"
+  },
+  {
+   "id": "t093",
+   "note": "b3-note-093",
+   "title": "Task 093",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g3"
+  },
+  {
+   "id": "t094",
+   "note": "b3-note-094",
+   "title": "Task 094",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g3"
+  },
+  {
+   "id": "t095",
+   "note": "b3-note-095",
+   "title": "Task 095",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g3"
+  },
+  {
+   "id": "t096",
+   "note": "b3-note-096",
+   "title": "Task 096",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g3"
+  },
+  {
+   "id": "t097",
+   "note": "b3-note-097",
+   "title": "Task 097",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g3"
+  },
+  {
+   "id": "t098",
+   "note": "b3-note-098",
+   "title": "Task 098",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g3"
+  },
+  {
+   "id": "t099",
+   "note": "b3-note-099",
+   "title": "Task 099",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g3"
+  },
+  {
+   "id": "t100",
+   "note": "b3-note-100",
+   "title": "Task 100",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g3"
+  },
+  {
+   "id": "t101",
+   "note": "b3-note-101",
+   "title": "Task 101",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g3"
+  },
+  {
+   "id": "t102",
+   "note": "b3-note-102",
+   "title": "Task 102",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g3"
+  },
+  {
+   "id": "t103",
+   "note": "b3-note-103",
+   "title": "Task 103",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g3"
+  },
+  {
+   "id": "t104",
+   "note": "b3-note-104",
+   "title": "Task 104",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g3"
+  },
+  {
+   "id": "t105",
+   "note": "b3-note-105",
+   "title": "Task 105",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g3"
+  },
+  {
+   "id": "t106",
+   "note": "b3-note-106",
+   "title": "Task 106",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g3"
+  },
+  {
+   "id": "t107",
+   "note": "b3-note-107",
+   "title": "Task 107",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g3"
+  },
+  {
+   "id": "t108",
+   "note": "b3-note-108",
+   "title": "Task 108",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g3"
+  },
+  {
+   "id": "t109",
+   "note": "b3-note-109",
+   "title": "Task 109",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g3"
+  },
+  {
+   "id": "t110",
+   "note": "b3-note-110",
+   "title": "Task 110",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g3"
+  },
+  {
+   "id": "t111",
+   "note": "b3-note-111",
+   "title": "Task 111",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g3"
+  },
+  {
+   "id": "t112",
+   "note": "b3-note-112",
+   "title": "Task 112",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g3"
+  },
+  {
+   "id": "t113",
+   "note": "b3-note-113",
+   "title": "Task 113",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g3"
+  },
+  {
+   "id": "t114",
+   "note": "b3-note-114",
+   "title": "Task 114",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g3"
+  },
+  {
+   "id": "t115",
+   "note": "b3-note-115",
+   "title": "Task 115",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g3"
+  },
+  {
+   "id": "t116",
+   "note": "b3-note-116",
+   "title": "Task 116",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g3"
+  },
+  {
+   "id": "t117",
+   "note": "b3-note-117",
+   "title": "Task 117",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g3"
+  },
+  {
+   "id": "t118",
+   "note": "b3-note-118",
+   "title": "Task 118",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g3"
+  },
+  {
+   "id": "t119",
+   "note": "b3-note-119",
+   "title": "Task 119",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g3"
+  },
+  {
+   "id": "t120",
+   "note": "b3-note-120",
+   "title": "Task 120",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g4"
+  },
+  {
+   "id": "t121",
+   "note": "b3-note-121",
+   "title": "Task 121",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g4"
+  },
+  {
+   "id": "t122",
+   "note": "b3-note-122",
+   "title": "Task 122",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g4"
+  },
+  {
+   "id": "t123",
+   "note": "b3-note-123",
+   "title": "Task 123",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g4"
+  },
+  {
+   "id": "t124",
+   "note": "b3-note-124",
+   "title": "Task 124",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g4"
+  },
+  {
+   "id": "t125",
+   "note": "b3-note-125",
+   "title": "Task 125",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g4"
+  },
+  {
+   "id": "t126",
+   "note": "b3-note-126",
+   "title": "Task 126",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g4"
+  },
+  {
+   "id": "t127",
+   "note": "b3-note-127",
+   "title": "Task 127",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g4"
+  },
+  {
+   "id": "t128",
+   "note": "b3-note-128",
+   "title": "Task 128",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g4"
+  },
+  {
+   "id": "t129",
+   "note": "b3-note-129",
+   "title": "Task 129",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g4"
+  },
+  {
+   "id": "t130",
+   "note": "b3-note-130",
+   "title": "Task 130",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g4"
+  },
+  {
+   "id": "t131",
+   "note": "b3-note-131",
+   "title": "Task 131",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g4"
+  },
+  {
+   "id": "t132",
+   "note": "b3-note-132",
+   "title": "Task 132",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g4"
+  },
+  {
+   "id": "t133",
+   "note": "b3-note-133",
+   "title": "Task 133",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g4"
+  },
+  {
+   "id": "t134",
+   "note": "b3-note-134",
+   "title": "Task 134",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g4"
+  },
+  {
+   "id": "t135",
+   "note": "b3-note-135",
+   "title": "Task 135",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g4"
+  },
+  {
+   "id": "t136",
+   "note": "b3-note-136",
+   "title": "Task 136",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g4"
+  },
+  {
+   "id": "t137",
+   "note": "b3-note-137",
+   "title": "Task 137",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g4"
+  },
+  {
+   "id": "t138",
+   "note": "b3-note-138",
+   "title": "Task 138",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g4"
+  },
+  {
+   "id": "t139",
+   "note": "b3-note-139",
+   "title": "Task 139",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g4"
+  },
+  {
+   "id": "t140",
+   "note": "b3-note-140",
+   "title": "Task 140",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g4"
+  },
+  {
+   "id": "t141",
+   "note": "b3-note-141",
+   "title": "Task 141",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g4"
+  },
+  {
+   "id": "t142",
+   "note": "b3-note-142",
+   "title": "Task 142",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g4"
+  },
+  {
+   "id": "t143",
+   "note": "b3-note-143",
+   "title": "Task 143",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g4"
+  },
+  {
+   "id": "t144",
+   "note": "b3-note-144",
+   "title": "Task 144",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g4"
+  },
+  {
+   "id": "t145",
+   "note": "b3-note-145",
+   "title": "Task 145",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g4"
+  },
+  {
+   "id": "t146",
+   "note": "b3-note-146",
+   "title": "Task 146",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g4"
+  },
+  {
+   "id": "t147",
+   "note": "b3-note-147",
+   "title": "Task 147",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g4"
+  },
+  {
+   "id": "t148",
+   "note": "b3-note-148",
+   "title": "Task 148",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g4"
+  },
+  {
+   "id": "t149",
+   "note": "b3-note-149",
+   "title": "Task 149",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g4"
+  },
+  {
+   "id": "t150",
+   "note": "b3-note-150",
+   "title": "Task 150",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g5"
+  },
+  {
+   "id": "t151",
+   "note": "b3-note-151",
+   "title": "Task 151",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g5"
+  },
+  {
+   "id": "t152",
+   "note": "b3-note-152",
+   "title": "Task 152",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g5"
+  },
+  {
+   "id": "t153",
+   "note": "b3-note-153",
+   "title": "Task 153",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g5"
+  },
+  {
+   "id": "t154",
+   "note": "b3-note-154",
+   "title": "Task 154",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g5"
+  },
+  {
+   "id": "t155",
+   "note": "b3-note-155",
+   "title": "Task 155",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g5"
+  },
+  {
+   "id": "t156",
+   "note": "b3-note-156",
+   "title": "Task 156",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g5"
+  },
+  {
+   "id": "t157",
+   "note": "b3-note-157",
+   "title": "Task 157",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g5"
+  },
+  {
+   "id": "t158",
+   "note": "b3-note-158",
+   "title": "Task 158",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g5"
+  },
+  {
+   "id": "t159",
+   "note": "b3-note-159",
+   "title": "Task 159",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g5"
+  },
+  {
+   "id": "t160",
+   "note": "b3-note-160",
+   "title": "Task 160",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g5"
+  },
+  {
+   "id": "t161",
+   "note": "b3-note-161",
+   "title": "Task 161",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g5"
+  },
+  {
+   "id": "t162",
+   "note": "b3-note-162",
+   "title": "Task 162",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g5"
+  },
+  {
+   "id": "t163",
+   "note": "b3-note-163",
+   "title": "Task 163",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g5"
+  },
+  {
+   "id": "t164",
+   "note": "b3-note-164",
+   "title": "Task 164",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g5"
+  },
+  {
+   "id": "t165",
+   "note": "b3-note-165",
+   "title": "Task 165",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g5"
+  },
+  {
+   "id": "t166",
+   "note": "b3-note-166",
+   "title": "Task 166",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g5"
+  },
+  {
+   "id": "t167",
+   "note": "b3-note-167",
+   "title": "Task 167",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g5"
+  },
+  {
+   "id": "t168",
+   "note": "b3-note-168",
+   "title": "Task 168",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g5"
+  },
+  {
+   "id": "t169",
+   "note": "b3-note-169",
+   "title": "Task 169",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g5"
+  },
+  {
+   "id": "t170",
+   "note": "b3-note-170",
+   "title": "Task 170",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g5"
+  },
+  {
+   "id": "t171",
+   "note": "b3-note-171",
+   "title": "Task 171",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g5"
+  },
+  {
+   "id": "t172",
+   "note": "b3-note-172",
+   "title": "Task 172",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g5"
+  },
+  {
+   "id": "t173",
+   "note": "b3-note-173",
+   "title": "Task 173",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g5"
+  },
+  {
+   "id": "t174",
+   "note": "b3-note-174",
+   "title": "Task 174",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g5"
+  },
+  {
+   "id": "t175",
+   "note": "b3-note-175",
+   "title": "Task 175",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g5"
+  },
+  {
+   "id": "t176",
+   "note": "b3-note-176",
+   "title": "Task 176",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g5"
+  },
+  {
+   "id": "t177",
+   "note": "b3-note-177",
+   "title": "Task 177",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g5"
+  },
+  {
+   "id": "t178",
+   "note": "b3-note-178",
+   "title": "Task 178",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g5"
+  },
+  {
+   "id": "t179",
+   "note": "b3-note-179",
+   "title": "Task 179",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g5"
+  },
+  {
+   "id": "t180",
+   "note": "b3-note-180",
+   "title": "Task 180",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g6"
+  },
+  {
+   "id": "t181",
+   "note": "b3-note-181",
+   "title": "Task 181",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g6"
+  },
+  {
+   "id": "t182",
+   "note": "b3-note-182",
+   "title": "Task 182",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g6"
+  },
+  {
+   "id": "t183",
+   "note": "b3-note-183",
+   "title": "Task 183",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g6"
+  },
+  {
+   "id": "t184",
+   "note": "b3-note-184",
+   "title": "Task 184",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g6"
+  },
+  {
+   "id": "t185",
+   "note": "b3-note-185",
+   "title": "Task 185",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g6"
+  },
+  {
+   "id": "t186",
+   "note": "b3-note-186",
+   "title": "Task 186",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g6"
+  },
+  {
+   "id": "t187",
+   "note": "b3-note-187",
+   "title": "Task 187",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g6"
+  },
+  {
+   "id": "t188",
+   "note": "b3-note-188",
+   "title": "Task 188",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g6"
+  },
+  {
+   "id": "t189",
+   "note": "b3-note-189",
+   "title": "Task 189",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g6"
+  },
+  {
+   "id": "t190",
+   "note": "b3-note-190",
+   "title": "Task 190",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g6"
+  },
+  {
+   "id": "t191",
+   "note": "b3-note-191",
+   "title": "Task 191",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g6"
+  },
+  {
+   "id": "t192",
+   "note": "b3-note-192",
+   "title": "Task 192",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g6"
+  },
+  {
+   "id": "t193",
+   "note": "b3-note-193",
+   "title": "Task 193",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g6"
+  },
+  {
+   "id": "t194",
+   "note": "b3-note-194",
+   "title": "Task 194",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g6"
+  },
+  {
+   "id": "t195",
+   "note": "b3-note-195",
+   "title": "Task 195",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g6"
+  },
+  {
+   "id": "t196",
+   "note": "b3-note-196",
+   "title": "Task 196",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g6"
+  },
+  {
+   "id": "t197",
+   "note": "b3-note-197",
+   "title": "Task 197",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g6"
+  },
+  {
+   "id": "t198",
+   "note": "b3-note-198",
+   "title": "Task 198",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g6"
+  },
+  {
+   "id": "t199",
+   "note": "b3-note-199",
+   "title": "Task 199",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g6"
+  },
+  {
+   "id": "t200",
+   "note": "b3-note-200",
+   "title": "Task 200",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g6"
+  },
+  {
+   "id": "t201",
+   "note": "b3-note-201",
+   "title": "Task 201",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g6"
+  },
+  {
+   "id": "t202",
+   "note": "b3-note-202",
+   "title": "Task 202",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g6"
+  },
+  {
+   "id": "t203",
+   "note": "b3-note-203",
+   "title": "Task 203",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g6"
+  },
+  {
+   "id": "t204",
+   "note": "b3-note-204",
+   "title": "Task 204",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g6"
+  },
+  {
+   "id": "t205",
+   "note": "b3-note-205",
+   "title": "Task 205",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g6"
+  },
+  {
+   "id": "t206",
+   "note": "b3-note-206",
+   "title": "Task 206",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g6"
+  },
+  {
+   "id": "t207",
+   "note": "b3-note-207",
+   "title": "Task 207",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g6"
+  },
+  {
+   "id": "t208",
+   "note": "b3-note-208",
+   "title": "Task 208",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g6"
+  },
+  {
+   "id": "t209",
+   "note": "b3-note-209",
+   "title": "Task 209",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g6"
+  },
+  {
+   "id": "t210",
+   "note": "b3-note-210",
+   "title": "Task 210",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g7"
+  },
+  {
+   "id": "t211",
+   "note": "b3-note-211",
+   "title": "Task 211",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g7"
+  },
+  {
+   "id": "t212",
+   "note": "b3-note-212",
+   "title": "Task 212",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g7"
+  },
+  {
+   "id": "t213",
+   "note": "b3-note-213",
+   "title": "Task 213",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g7"
+  },
+  {
+   "id": "t214",
+   "note": "b3-note-214",
+   "title": "Task 214",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g7"
+  },
+  {
+   "id": "t215",
+   "note": "b3-note-215",
+   "title": "Task 215",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g7"
+  },
+  {
+   "id": "t216",
+   "note": "b3-note-216",
+   "title": "Task 216",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g7"
+  },
+  {
+   "id": "t217",
+   "note": "b3-note-217",
+   "title": "Task 217",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g7"
+  },
+  {
+   "id": "t218",
+   "note": "b3-note-218",
+   "title": "Task 218",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g7"
+  },
+  {
+   "id": "t219",
+   "note": "b3-note-219",
+   "title": "Task 219",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g7"
+  },
+  {
+   "id": "t220",
+   "note": "b3-note-220",
+   "title": "Task 220",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g7"
+  },
+  {
+   "id": "t221",
+   "note": "b3-note-221",
+   "title": "Task 221",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g7"
+  },
+  {
+   "id": "t222",
+   "note": "b3-note-222",
+   "title": "Task 222",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g7"
+  },
+  {
+   "id": "t223",
+   "note": "b3-note-223",
+   "title": "Task 223",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g7"
+  },
+  {
+   "id": "t224",
+   "note": "b3-note-224",
+   "title": "Task 224",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g7"
+  },
+  {
+   "id": "t225",
+   "note": "b3-note-225",
+   "title": "Task 225",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g7"
+  },
+  {
+   "id": "t226",
+   "note": "b3-note-226",
+   "title": "Task 226",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g7"
+  },
+  {
+   "id": "t227",
+   "note": "b3-note-227",
+   "title": "Task 227",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g7"
+  },
+  {
+   "id": "t228",
+   "note": "b3-note-228",
+   "title": "Task 228",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g7"
+  },
+  {
+   "id": "t229",
+   "note": "b3-note-229",
+   "title": "Task 229",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g7"
+  },
+  {
+   "id": "t230",
+   "note": "b3-note-230",
+   "title": "Task 230",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g7"
+  },
+  {
+   "id": "t231",
+   "note": "b3-note-231",
+   "title": "Task 231",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g7"
+  },
+  {
+   "id": "t232",
+   "note": "b3-note-232",
+   "title": "Task 232",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g7"
+  },
+  {
+   "id": "t233",
+   "note": "b3-note-233",
+   "title": "Task 233",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g7"
+  },
+  {
+   "id": "t234",
+   "note": "b3-note-234",
+   "title": "Task 234",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g7"
+  },
+  {
+   "id": "t235",
+   "note": "b3-note-235",
+   "title": "Task 235",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g7"
+  },
+  {
+   "id": "t236",
+   "note": "b3-note-236",
+   "title": "Task 236",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g7"
+  },
+  {
+   "id": "t237",
+   "note": "b3-note-237",
+   "title": "Task 237",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g7"
+  },
+  {
+   "id": "t238",
+   "note": "b3-note-238",
+   "title": "Task 238",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g7"
+  },
+  {
+   "id": "t239",
+   "note": "b3-note-239",
+   "title": "Task 239",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g7"
+  },
+  {
+   "id": "t240",
+   "note": "b3-note-240",
+   "title": "Task 240",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g8"
+  },
+  {
+   "id": "t241",
+   "note": "b3-note-241",
+   "title": "Task 241",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g8"
+  },
+  {
+   "id": "t242",
+   "note": "b3-note-242",
+   "title": "Task 242",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g8"
+  },
+  {
+   "id": "t243",
+   "note": "b3-note-243",
+   "title": "Task 243",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g8"
+  },
+  {
+   "id": "t244",
+   "note": "b3-note-244",
+   "title": "Task 244",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g8"
+  },
+  {
+   "id": "t245",
+   "note": "b3-note-245",
+   "title": "Task 245",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g8"
+  },
+  {
+   "id": "t246",
+   "note": "b3-note-246",
+   "title": "Task 246",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g8"
+  },
+  {
+   "id": "t247",
+   "note": "b3-note-247",
+   "title": "Task 247",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g8"
+  },
+  {
+   "id": "t248",
+   "note": "b3-note-248",
+   "title": "Task 248",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g8"
+  },
+  {
+   "id": "t249",
+   "note": "b3-note-249",
+   "title": "Task 249",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g8"
+  },
+  {
+   "id": "t250",
+   "note": "b3-note-250",
+   "title": "Task 250",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g8"
+  },
+  {
+   "id": "t251",
+   "note": "b3-note-251",
+   "title": "Task 251",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g8"
+  },
+  {
+   "id": "t252",
+   "note": "b3-note-252",
+   "title": "Task 252",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g8"
+  },
+  {
+   "id": "t253",
+   "note": "b3-note-253",
+   "title": "Task 253",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g8"
+  },
+  {
+   "id": "t254",
+   "note": "b3-note-254",
+   "title": "Task 254",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g8"
+  },
+  {
+   "id": "t255",
+   "note": "b3-note-255",
+   "title": "Task 255",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g8"
+  },
+  {
+   "id": "t256",
+   "note": "b3-note-256",
+   "title": "Task 256",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g8"
+  },
+  {
+   "id": "t257",
+   "note": "b3-note-257",
+   "title": "Task 257",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g8"
+  },
+  {
+   "id": "t258",
+   "note": "b3-note-258",
+   "title": "Task 258",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g8"
+  },
+  {
+   "id": "t259",
+   "note": "b3-note-259",
+   "title": "Task 259",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g8"
+  },
+  {
+   "id": "t260",
+   "note": "b3-note-260",
+   "title": "Task 260",
+   "start": "2026-10-21",
+   "end": "2026-10-24",
+   "group": "g8"
+  },
+  {
+   "id": "t261",
+   "note": "b3-note-261",
+   "title": "Task 261",
+   "start": "2026-10-22",
+   "end": "2026-10-25",
+   "group": "g8"
+  },
+  {
+   "id": "t262",
+   "note": "b3-note-262",
+   "title": "Task 262",
+   "start": "2026-10-23",
+   "end": "2026-10-26",
+   "group": "g8"
+  },
+  {
+   "id": "t263",
+   "note": "b3-note-263",
+   "title": "Task 263",
+   "start": "2026-10-24",
+   "end": "2026-10-27",
+   "group": "g8"
+  },
+  {
+   "id": "t264",
+   "note": "b3-note-264",
+   "title": "Task 264",
+   "start": "2026-10-25",
+   "end": "2026-10-28",
+   "group": "g8"
+  },
+  {
+   "id": "t265",
+   "note": "b3-note-265",
+   "title": "Task 265",
+   "start": "2026-10-26",
+   "end": "2026-10-29",
+   "group": "g8"
+  },
+  {
+   "id": "t266",
+   "note": "b3-note-266",
+   "title": "Task 266",
+   "start": "2026-10-27",
+   "end": "2026-10-30",
+   "group": "g8"
+  },
+  {
+   "id": "t267",
+   "note": "b3-note-267",
+   "title": "Task 267",
+   "start": "2026-10-28",
+   "end": "2026-10-31",
+   "group": "g8"
+  },
+  {
+   "id": "t268",
+   "note": "b3-note-268",
+   "title": "Task 268",
+   "start": "2026-10-29",
+   "end": "2026-11-01",
+   "group": "g8"
+  },
+  {
+   "id": "t269",
+   "note": "b3-note-269",
+   "title": "Task 269",
+   "start": "2026-10-30",
+   "end": "2026-11-02",
+   "group": "g8"
+  },
+  {
+   "id": "t270",
+   "note": "b3-note-270",
+   "title": "Task 270",
+   "start": "2026-10-31",
+   "end": "2026-11-03",
+   "group": "g9"
+  },
+  {
+   "id": "t271",
+   "note": "b3-note-271",
+   "title": "Task 271",
+   "start": "2026-11-01",
+   "end": "2026-11-04",
+   "group": "g9"
+  },
+  {
+   "id": "t272",
+   "note": "b3-note-272",
+   "title": "Task 272",
+   "start": "2026-11-02",
+   "end": "2026-11-05",
+   "group": "g9"
+  },
+  {
+   "id": "t273",
+   "note": "b3-note-273",
+   "title": "Task 273",
+   "start": "2026-11-03",
+   "end": "2026-11-06",
+   "group": "g9"
+  },
+  {
+   "id": "t274",
+   "note": "b3-note-274",
+   "title": "Task 274",
+   "start": "2026-11-04",
+   "end": "2026-11-07",
+   "group": "g9"
+  },
+  {
+   "id": "t275",
+   "note": "b3-note-275",
+   "title": "Task 275",
+   "start": "2026-11-05",
+   "end": "2026-11-08",
+   "group": "g9"
+  },
+  {
+   "id": "t276",
+   "note": "b3-note-276",
+   "title": "Task 276",
+   "start": "2026-11-06",
+   "end": "2026-11-09",
+   "group": "g9"
+  },
+  {
+   "id": "t277",
+   "note": "b3-note-277",
+   "title": "Task 277",
+   "start": "2026-11-07",
+   "end": "2026-11-10",
+   "group": "g9"
+  },
+  {
+   "id": "t278",
+   "note": "b3-note-278",
+   "title": "Task 278",
+   "start": "2026-11-08",
+   "end": "2026-11-11",
+   "group": "g9"
+  },
+  {
+   "id": "t279",
+   "note": "b3-note-279",
+   "title": "Task 279",
+   "start": "2026-11-09",
+   "end": "2026-11-12",
+   "group": "g9"
+  },
+  {
+   "id": "t280",
+   "note": "b3-note-280",
+   "title": "Task 280",
+   "start": "2026-10-01",
+   "end": "2026-10-04",
+   "group": "g9"
+  },
+  {
+   "id": "t281",
+   "note": "b3-note-281",
+   "title": "Task 281",
+   "start": "2026-10-02",
+   "end": "2026-10-05",
+   "group": "g9"
+  },
+  {
+   "id": "t282",
+   "note": "b3-note-282",
+   "title": "Task 282",
+   "start": "2026-10-03",
+   "end": "2026-10-06",
+   "group": "g9"
+  },
+  {
+   "id": "t283",
+   "note": "b3-note-283",
+   "title": "Task 283",
+   "start": "2026-10-04",
+   "end": "2026-10-07",
+   "group": "g9"
+  },
+  {
+   "id": "t284",
+   "note": "b3-note-284",
+   "title": "Task 284",
+   "start": "2026-10-05",
+   "end": "2026-10-08",
+   "group": "g9"
+  },
+  {
+   "id": "t285",
+   "note": "b3-note-285",
+   "title": "Task 285",
+   "start": "2026-10-06",
+   "end": "2026-10-09",
+   "group": "g9"
+  },
+  {
+   "id": "t286",
+   "note": "b3-note-286",
+   "title": "Task 286",
+   "start": "2026-10-07",
+   "end": "2026-10-10",
+   "group": "g9"
+  },
+  {
+   "id": "t287",
+   "note": "b3-note-287",
+   "title": "Task 287",
+   "start": "2026-10-08",
+   "end": "2026-10-11",
+   "group": "g9"
+  },
+  {
+   "id": "t288",
+   "note": "b3-note-288",
+   "title": "Task 288",
+   "start": "2026-10-09",
+   "end": "2026-10-12",
+   "group": "g9"
+  },
+  {
+   "id": "t289",
+   "note": "b3-note-289",
+   "title": "Task 289",
+   "start": "2026-10-10",
+   "end": "2026-10-13",
+   "group": "g9"
+  },
+  {
+   "id": "t290",
+   "note": "b3-note-290",
+   "title": "Task 290",
+   "start": "2026-10-11",
+   "end": "2026-10-14",
+   "group": "g9"
+  },
+  {
+   "id": "t291",
+   "note": "b3-note-291",
+   "title": "Task 291",
+   "start": "2026-10-12",
+   "end": "2026-10-15",
+   "group": "g9"
+  },
+  {
+   "id": "t292",
+   "note": "b3-note-292",
+   "title": "Task 292",
+   "start": "2026-10-13",
+   "end": "2026-10-16",
+   "group": "g9"
+  },
+  {
+   "id": "t293",
+   "note": "b3-note-293",
+   "title": "Task 293",
+   "start": "2026-10-14",
+   "end": "2026-10-17",
+   "group": "g9"
+  },
+  {
+   "id": "t294",
+   "note": "b3-note-294",
+   "title": "Task 294",
+   "start": "2026-10-15",
+   "end": "2026-10-18",
+   "group": "g9"
+  },
+  {
+   "id": "t295",
+   "note": "b3-note-295",
+   "title": "Task 295",
+   "start": "2026-10-16",
+   "end": "2026-10-19",
+   "group": "g9"
+  },
+  {
+   "id": "t296",
+   "note": "b3-note-296",
+   "title": "Task 296",
+   "start": "2026-10-17",
+   "end": "2026-10-20",
+   "group": "g9"
+  },
+  {
+   "id": "t297",
+   "note": "b3-note-297",
+   "title": "Task 297",
+   "start": "2026-10-18",
+   "end": "2026-10-21",
+   "group": "g9"
+  },
+  {
+   "id": "t298",
+   "note": "b3-note-298",
+   "title": "Task 298",
+   "start": "2026-10-19",
+   "end": "2026-10-22",
+   "group": "g9"
+  },
+  {
+   "id": "t299",
+   "note": "b3-note-299",
+   "title": "Task 299",
+   "start": "2026-10-20",
+   "end": "2026-10-23",
+   "group": "g9"
+  }
+ ]
+}

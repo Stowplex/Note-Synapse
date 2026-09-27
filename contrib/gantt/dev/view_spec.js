@@ -351,8 +351,10 @@
       /A\.setLocale = function \(tag\) \{\s*I\(\)\.setLanguage\(tag\);/.test(appCode));
     var saved = I.language;
     I.setLanguage('zh-CN');
+    // Patterns that read the same in zh-CN (task-groups plan §9).
+    var SAME = ['{task} → {group}'];
     var missing = keys.filter(function (k) {
-      if (/fmt$/.test(k[0])) return I.fmt(k[1], { n: 2, title: 'x' }) === k[1].replace('{n}', '2').replace('{title}', 'x').replace('(s)', 's');
+      if (/fmt$/.test(k[0])) return SAME.indexOf(k[1]) < 0 && I.fmt(k[1], { n: 2, title: 'x' }) === k[1].replace('{n}', '2').replace('{title}', 'x').replace('(s)', 's');
       return I.text(k[1]) === k[1];
     }).map(function (k) { return k[0] + ': ' + k[1]; });
     var banners = ['future', 'malformed', 'check-failed', 'restore', 'kept', 'read-only'].filter(function (k) {

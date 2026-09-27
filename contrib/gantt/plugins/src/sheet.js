@@ -89,7 +89,7 @@
   }
   // Focus one row of a menu or list; list rows keep one tab stop (roving).
   function roveTo(rows, row) {
-    if (row.classList.contains('sh-trow')) rows.forEach(function (x) { x.setAttribute('tabindex', x === row ? '0' : '-1'); });
+    if (row.classList.contains('sh-trow') || row.getAttribute('role') === 'radio') rows.forEach(function (x) { x.setAttribute('tabindex', x === row ? '0' : '-1'); });
     try { row.focus({ preventScroll: false }); } catch (e) { row.focus(); }
   }
   function button(cls, text, parent, run) {
@@ -107,7 +107,13 @@
    *   act(name, id, value)          'dates' {start, end}, 'milestone' bool,
    *                                 'color' name or null, 'open', 'remove',
    *                                 'item' key (a completion-list tap),
-   *                                 'openItem' key (a child task's chevron)
+   *                                 'openItem' key (a child task's chevron);
+   *                                 G0: 'title' text (a note-less task),
+   *                                 'renameNote' text -> promise of {ok},
+   *                                 'linkNote' (a note-less milestone);
+   *                                 G3: 'group' id or null (the Group row),
+   *                                 'newGroup' ("New group…")
+   *   group(id), groupAct(name, id, value)   the group sheet (G3, openGroup)
    *   onClose(kind, id)             after the sheet closed
    *   colors                        the palette names (model.COLORS)
    */
@@ -286,6 +292,8 @@
    *  progress: {done, total, ratio, text},
    *  items: {state: 'loading'|'ok'|'failed'|'none', list: [{key, kind:
    *          'check'|'sub'|'child', text, done, busy}]}} with day numbers (or null).
+   * G0 adds name (the Title field's value: the JSON title, or the note's
+   * title for a noted task), missing (the note is gone) and syncDates.
    */
   SH.openTask = function (id, detent) {
     var vm = st.ctx.task ? st.ctx.task(id) : null;
@@ -297,8 +305,129 @@
     return true;
   };
 
+  // Whitespace runs collapsed and trimmed (a typed title).
+  SH.cleanTitle = function (v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); };
+
+  /*
+   * G0 (§8.9): the name field at the top of the task sheet. A note-less
+   * task's Title commits on change, Enter and every close (parts.flush),
+   * never while typing. A noted task's Note title renames the note: sent
+   * only by Enter or [Rename] (shown while the draft differs); blur keeps
+   * the draft, a close discards it, Escape restores. While a rename is in
+   * flight the field is aria-busy and a second send is ignored.
+   */
+  function buildName(b, P) {
+    var nf = el('div', 'sh-ff sh-name', null, b);
+    nf.setAttribute('data-field', 'name');
+    P.nameLab = el('label', 'sh-flab', '', nf);
+    P.nameLab.setAttribute('for', 'sh-name-in');
+    var row = el('div', 'sh-nrow', null, nf);
+    var ni = P.name = el('input', 'sh-input', null, row);
+    ni.type = 'text';
+    ni.id = 'sh-name-in';
+    ni.setAttribute('autocomplete', 'off');
+    P.renameBtn = button('sh-btn', T('Rename'), row, function () { sendRename(); });
+    P.renameBtn.setAttribute('data-action', 'rename-note');
+    P.renameBtn.hidden = true;
+    P.nameHint = el('div', 'sh-detail', T('Renames the note itself, everywhere it appears.'), nf);
+    P.nameHint.id = 'sh-name-hint';
+    // Announces [Rename] when it appears (§8.11).
+    P.nameLive = el('div', 'sh-live', '', nf);
+    P.nameLive.setAttribute('role', 'status');
+    P.nameMode = null; P.applied = ''; P.base = ''; P.busy = false; P.nameRo = false;
+    function commitTitle() {
+      if (P.nameMode !== 'title' || P.nameRo) return;
+      var v = SH.cleanTitle(ni.value);
+      // An empty value is not committed: the field shows the title again.
+      if (!v || v === P.applied) { if (ni.value !== P.applied) ni.value = P.applied; return; }
+      P.applied = v;
+      ni.value = v;
+      st.ctx.act('title', st.id, v);
+    }
+    function syncRename() {
+      var v = SH.cleanTitle(ni.value);
+      var show = P.nameMode === 'note' && !P.nameRo && !P.busy && !!v && v !== P.base;
+      if (P.renameBtn.hidden !== !show) {
+        P.renameBtn.hidden = !show;
+        P.nameLive.textContent = show ? T('Rename note') : '';
+      }
+    }
+    function setBusy(on) {
+      P.busy = on;
+      ni.readOnly = on || P.nameRo;
+      if (on) ni.setAttribute('aria-busy', 'true'); else ni.removeAttribute('aria-busy');
+      P.renameBtn.disabled = on;
+    }
+    P.setBusy = setBusy;
+    function sendRename() {
+      if (P.nameMode !== 'note' || P.busy || P.nameRo) return;
+      var v = SH.cleanTitle(ni.value), id = st.id;
+      if (!v || v === P.base) { ni.value = P.base; syncRename(); return; }
+      setBusy(true);
+      Promise.resolve(st.ctx.act('renameNote', id, v)).then(function (r) {
+        setBusy(false);
+        // Success keeps the new name; a denial or failure reverts the field.
+        if (r && r.ok) P.base = v;
+        ni.value = P.base;
+        syncRename();
+      });
+    }
+    ni.addEventListener('change', commitTitle);
+    ni.addEventListener('input', function () { if (P.nameMode === 'note') syncRename(); });
+    ni.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        if (P.nameMode === 'title') commitTitle(); else sendRename();
+        return;
+      }
+      if (ev.key === 'Escape') {
+        // The app's key handler ignores inputs, so the field restores itself.
+        ev.preventDefault();
+        if (P.busy) return;
+        ni.value = P.nameMode === 'note' ? P.base : P.applied;
+        syncRename();
+        focusTitle();
+      }
+    });
+    P.flush = commitTitle;
+    P.syncRename = syncRename;
+  }
+  function fillName(vm, ro) {
+    var P = st.parts, ni = P.name, mode = vm.note ? 'note' : 'title';
+    var name = typeof vm.name === 'string' ? vm.name : vm.title;
+    P.nameLab.textContent = T(vm.note ? 'Note title' : 'Title');
+    // A missing note cannot be renamed: no hint (G0 review 1).
+    P.nameHint.hidden = !vm.note || !!vm.missing;
+    if (!P.nameHint.hidden) ni.setAttribute('aria-describedby', 'sh-name-hint'); else ni.removeAttribute('aria-describedby');
+    ni.placeholder = vm.note ? '' : T('Milestone');
+    var focused = st.doc.activeElement === ni;
+    if (P.nameMode !== mode) {
+      // A link turned a note-less task into a noted one: start over.
+      P.nameMode = mode;
+      P.applied = P.base = name;
+      ni.value = name;
+    } else if (mode === 'title') {
+      P.applied = name;
+      if (!focused && ni.value !== name) ni.value = name;
+    } else if (!P.busy) {
+      var draft = SH.cleanTitle(ni.value) !== P.base;
+      P.base = name;
+      if (!draft && ni.value !== name) ni.value = name;
+    }
+    // A missing note shows its last title read-only (§8.9.2).
+    P.nameRo = !!ro || (!!vm.note && !!vm.missing);
+    ni.disabled = !!ro;
+    if (!P.busy) ni.readOnly = P.nameRo;
+    // A sheet rebuilt (relabel, reopen) while a rename is in flight takes the
+    // busy state from the app, and drops it when the app says it ended.
+    if (vm.renaming && !P.busy) { P.vmBusy = true; P.setBusy(true); }
+    else if (!vm.renaming && P.vmBusy) { P.vmBusy = false; P.setBusy(false); P.base = name; ni.value = name; }
+    P.syncRename();
+  }
+
   function buildTask() {
     var b = st.body, P = (st.parts = {});
+    buildName(b, P);
     var dates = el('div', 'sh-dates', null, b);
     function field(cls, label) {
       var f = el('label', 'sh-field ' + cls, null, dates);
@@ -340,6 +469,30 @@
       if (c) el('span', null, null, btn);
       P.sw.push(btn);
     });
+    // G3 (task-groups plan §8.5): the Group row, a radiogroup of No group and
+    // every group, then "New group…" (filled by fillGroupRow).
+    P.gLab = el('div', 'sh-lab', T('Group'), b);
+    P.gLab.id = 'sh-grp-lab';
+    P.grp = el('div', 'sh-gchips', null, b);
+    P.grp.setAttribute('role', 'radiogroup');
+    P.grp.setAttribute('aria-labelledby', 'sh-grp-lab');
+    P.grp.setAttribute('data-field', 'group');
+    // Arrow keys, Home and End move the focus between the chips (roving;
+    // Space or Enter picks, like a tap).
+    P.grp.addEventListener('keydown', function (ev) {
+      var k = ev.key, KEYS = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: 0, End: 0 };
+      if (!Object.prototype.hasOwnProperty.call(KEYS, k)) return;
+      var chips = Array.prototype.slice.call(P.grp.querySelectorAll('[role="radio"]'));
+      var i = chips.indexOf(ev.target);
+      if (i < 0 || !chips.length) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      var n = k === 'Home' ? 0 : k === 'End' ? chips.length - 1 : Math.max(0, Math.min(chips.length - 1, i + KEYS[k]));
+      roveTo(chips, chips[n]);
+    });
+    P.gNew = button('sh-chip sh-new', T('New group…'), b, function () { st.ctx.act('newGroup', st.id); });
+    P.gNew.setAttribute('data-action', 'new-group');
+    P.grpSig = null;
     el('div', 'sh-lab', T('Completion'), b);
     var pr = el('div', 'sh-prog', null, b);
     P.track = el('div', 'sh-track', null, pr);
@@ -358,22 +511,32 @@
       arm(P);
     });
     P.remove.setAttribute('data-action', 'remove');
+    // G0 (§8.9.1): a note-less milestone can take a note.
+    P.link = button('sh-btn', T('Link note…'), acts, function () { st.ctx.act('linkNote', st.id); });
+    P.link.setAttribute('data-action', 'link-note');
+    acts.insertBefore(P.link, P.remove);
+    P.linkHint = el('div', 'sh-lhint', T('Dates are written to the note the next time you move it'), b);
   }
+  // The two-step button of a sheet: the task sheet's Remove, the group sheet's Delete (G3).
+  function armBtn(P) { return P.remove ? { b: P.remove, off: 'Remove from chart', on: 'Tap again to remove' } : P.del ? { b: P.del, off: 'Delete group', on: 'Tap again to delete the group' } : null; }
   function arm(P) {
+    var x = armBtn(P);
+    if (!x) return;
     P.armed = true;
-    P.remove.textContent = T('Tap again to remove');
-    P.remove.classList.add('armed');
+    x.b.textContent = T(x.on);
+    x.b.classList.add('armed');
     // The timer disarms only the sheet that armed it.
     P.armTimer = st.win.setTimeout(function () { P.armTimer = null; disarm(P); }, SH.ARM_MS);
   }
   // Back to "Remove from chart" (timeout, close, another sheet).
   function disarm(P) {
     P = P || st.parts;
-    if (!P || !P.remove) return;
+    var x = P ? armBtn(P) : null;
+    if (!x) return;
     if (P.armTimer) { st.win.clearTimeout(P.armTimer); P.armTimer = null; }
     P.armed = false;
-    P.remove.textContent = T('Remove from chart');
-    P.remove.classList.remove('armed');
+    x.b.textContent = T(x.off);
+    x.b.classList.remove('armed');
   }
   SH.disarm = function () { disarm(); };
   // Keyboard Delete (§13.2): the first press arms Remove, like a first tap.
@@ -382,6 +545,13 @@
     if (st.kind !== 'task' || !P || !P.remove || P.remove.hidden) return false;
     if (!P.armed) arm(P);
     return true;
+  };
+  // G0 F2 (§8.11): focus the open task sheet's name field (keyboard only).
+  SH.focusName = function () {
+    var P = st.parts;
+    if (st.kind !== 'task' || !P || !P.name || P.name.disabled) return false;
+    try { P.name.focus(); P.name.select(); } catch (e) { return false; }
+    return st.doc.activeElement === P.name;
   };
   SH.removeArmed = function () { return st.kind === 'task' && !!st.parts && !!st.parts.armed; };
 
@@ -431,6 +601,7 @@
     st.title.textContent = vm.title;
     st.dot.className = 'sh-dot c-' + vm.hue;
     st.dot.hidden = false;
+    fillName(vm, ro);
     P.start.lab.textContent = T(vm.milestone ? 'Date' : 'Start');
     setVal(P.start.i, vm.start === null ? '' : d(vm.start));
     setVal(P.end.i, vm.start === null ? '' : d(vm.end === null ? vm.start : vm.end));
@@ -447,17 +618,242 @@
       b.setAttribute('aria-checked', (vm.color || '') === c ? 'true' : 'false');
       b.disabled = ro;
     });
+    fillGroupRow(vm, ro);
     var pg = vm.progress || {};
     P.track.className = 'sh-track c-' + vm.hue;
     P.fill.style.transform = 'scaleX(' + (typeof pg.ratio === 'number' ? Math.max(0, Math.min(1, pg.ratio)) : 0) + ')';
     P.ptext.textContent = pg.text || '';
     fillItems(vm.items, ro);
     P.open.hidden = !vm.note;
+    P.link.hidden = ro || !!vm.note;
+    P.linkHint.hidden = P.link.hidden || !vm.syncDates;
     P.remove.hidden = ro;
     if (ro) disarm();
     st.ro = ro;
     st.el.classList.toggle('ro', ro);
   }
+  /*
+   * G3 (§8.5): vm.group (the task's group id or null) and vm.groups
+   * ([{id, title, hue}] in order). A chip commits at once and the sheet
+   * stays open; the chips are rebuilt only when what they show changed.
+   */
+  function fillGroupRow(vm, ro) {
+    var P = st.parts, groups = vm.groups || [], cur = vm.group || '';
+    var sig = JSON.stringify([ro, cur, groups.map(function (g) { return [g.id, g.title, g.hue]; })]);
+    if (sig === P.grpSig) return;
+    P.grpSig = sig;
+    var box = P.grp, had = box.contains(st.doc.activeElement);
+    while (box.firstChild) box.removeChild(box.firstChild);
+    [{ id: '', title: T('No group'), hue: null }].concat(groups).forEach(function (g) {
+      var c = button('sh-chip', null, box, function () { if (!c.disabled && c.getAttribute('aria-checked') !== 'true') st.ctx.act('group', st.id, g.id || null); });
+      c.setAttribute('role', 'radio');
+      c.setAttribute('data-group', g.id);
+      c.setAttribute('aria-checked', g.id === cur ? 'true' : 'false');
+      if (g.hue) el('span', 'sh-dot c-' + g.hue, null, c).setAttribute('aria-hidden', 'true');
+      el('span', null, g.title, c);
+      c.disabled = ro;
+      // One tab stop: the checked chip (review round 1); arrows move between them.
+      c.setAttribute('tabindex', g.id === cur ? '0' : '-1');
+    });
+    P.gNew.hidden = ro;
+    // Review round 2: a pick rebuilds the chips; the focus goes to the newly
+    // checked one instead of dropping to the page.
+    var chk = had ? box.querySelector('[aria-checked="true"]') : null;
+    if (chk) { try { chk.focus({ preventScroll: true }); } catch (e) { chk.focus(); } }
+  }
+
+  /*
+   * G3 (task-groups plan §8.3, §8.4): the group sheet. ctx.group(id) ->
+   * {id, title, name, hue, color, collapsed, readOnly, first, last, heading}
+   * or null. ctx.groupAct(name, id, value) -> bool: 'title' text, 'color'
+   * name or null, 'move' -1 or 1, 'collapse', 'delete', and in create mode
+   * 'create' text. openGroup(null, detent, {create: true}) is create mode:
+   * the name field and [Create]. o.armDelete arms Delete (keyboard Delete).
+   * The name commits on change, Enter and every close (parts.flush), never
+   * while typing (the M8 live-form rules); an empty name is refused.
+   */
+  SH.openGroup = function (id, detent, o) {
+    o = o || {};
+    var create = !!o.create, vm = create ? null : (st.ctx.group ? st.ctx.group(id) : null);
+    if (!create && !vm) return false;
+    open(create ? 'group-new' : 'group', create ? null : id, o, detent, create ? T('Add group') : vm.title, create ? null : vm.hue);
+    buildGroup(create);
+    if (!create) fillGroup(vm);
+    else st.parts.heading = o.heading || '';
+    if (create && !o.noFocus) { try { st.parts.name.focus(); } catch (e) { focusTitle(); } } else focusTitle();
+    if (o.armDelete) SH.armDelete();
+    return true;
+  };
+  function buildGroup(create) {
+    var b = st.body, P = (st.parts = { create: create });
+    var nf = el('div', 'sh-ff sh-name', null, b);
+    nf.setAttribute('data-field', 'gname');
+    var lab = el('label', 'sh-flab', T('Group name'), nf);
+    lab.setAttribute('for', 'sh-gname-in');
+    var ni = P.name = el('input', 'sh-input', null, nf);
+    ni.type = 'text';
+    ni.id = 'sh-gname-in';
+    ni.placeholder = T('Group name');
+    ni.setAttribute('autocomplete', 'off');
+    P.hint = el('div', 'sh-detail', T('This name is the task list heading'), nf);
+    P.hint.id = 'sh-gname-hint';
+    P.hint.hidden = true;
+    // "A group needs a name", announced (§8.3).
+    P.err = el('div', 'sh-gerr', '', nf);
+    P.err.setAttribute('role', 'status');
+    P.applied = '';
+    P.heading = '';
+    function say(t) { P.err.textContent = t ? T(t) : ''; if (t) ni.setAttribute('aria-invalid', 'true'); else ni.removeAttribute('aria-invalid'); }
+    function syncHint() {
+      var on = !!P.heading && SH.cleanTitle(ni.value) === SH.cleanTitle(P.heading);
+      if (P.hint.hidden !== !on) P.hint.hidden = !on;
+      if (on) ni.setAttribute('aria-describedby', 'sh-gname-hint'); else ni.removeAttribute('aria-describedby');
+    }
+    P.syncHint = syncHint;
+    function commit() {
+      if (create || P.ro) return;
+      var v = SH.cleanTitle(ni.value);
+      if (!v) { ni.value = P.applied; syncHint(); say('A group needs a name'); return; }
+      if (v === P.applied) { if (ni.value !== v) ni.value = v; return; }
+      P.applied = v;
+      ni.value = v;
+      say('');
+      st.ctx.groupAct('title', st.id, v);
+    }
+    function doCreate() {
+      var v = SH.cleanTitle(ni.value), spec = st.spec;
+      if (!v) { say('A group needs a name'); try { ni.focus(); } catch (e) { /* no focus */ } return; }
+      say('');
+      // The owner may open another sheet (the task sheet, More > Groups).
+      if (st.ctx.groupAct('create', null, v) && st.spec === spec) SH.close();
+    }
+    ni.addEventListener('change', commit);
+    ni.addEventListener('input', function () { syncHint(); if (P.err.textContent && SH.cleanTitle(ni.value)) say(''); });
+    ni.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); if (create) doCreate(); else commit(); return; }
+      if (ev.key === 'Escape' && !create) {
+        // The app's key handler ignores inputs, so the field restores itself.
+        ev.preventDefault();
+        ni.value = P.applied;
+        syncHint();
+        say('');
+        focusTitle();
+      }
+    });
+    P.flush = commit;
+    if (create) {
+      var ca = el('div', 'sh-actions', null, b);
+      button('sh-btn primary', T('Create'), ca, doCreate).setAttribute('data-action', 'create');
+      button('sh-btn', T('Cancel'), ca, function () { SH.close(); }).setAttribute('data-action', 'cancel');
+      return;
+    }
+    P.swLab = el('div', 'sh-lab', T('Colour'), b);
+    var sw = P.swBox = el('div', 'sh-swatches sh-gsw', null, b);
+    sw.setAttribute('role', 'radiogroup');
+    sw.setAttribute('aria-label', T('Colour'));
+    P.sw = [];
+    [''].concat(st.ctx.colors || []).forEach(function (c) {
+      var btn = button('sw' + (c ? ' c-' + c : ' auto'), c ? null : T('Auto'), sw, function () { st.ctx.groupAct('color', st.id, c || null); });
+      btn.setAttribute('data-color', c);
+      btn.setAttribute('role', 'radio');
+      if (c) { btn.setAttribute('aria-label', T(COLOR_NAMES[c])); el('span', null, null, btn); }
+      P.sw.push(btn);
+    });
+    var acts = P.moves = el('div', 'sh-gacts', null, b);
+    P.up = button('sh-btn', T('Move up'), acts, function () { if (!P.up.disabled) st.ctx.groupAct('move', st.id, -1); });
+    P.up.setAttribute('data-action', 'move-up');
+    P.down = button('sh-btn', T('Move down'), acts, function () { if (!P.down.disabled) st.ctx.groupAct('move', st.id, 1); });
+    P.down.setAttribute('data-action', 'move-down');
+    var more = el('div', 'sh-gacts', null, b);
+    P.fold = button('sh-btn', '', more, function () { st.ctx.groupAct('collapse', st.id); });
+    P.fold.setAttribute('data-action', 'collapse');
+    P.del = button('sh-btn danger', T('Delete group'), more, function () {
+      if (P.armed) { disarm(P); st.ctx.groupAct('delete', st.id); return; }
+      arm(P);
+    });
+    P.del.setAttribute('data-action', 'delete-group');
+  }
+  function fillGroup(vm) {
+    var P = st.parts, ro = !!vm.readOnly, ni = P.name;
+    st.title.textContent = vm.title;
+    st.dot.className = 'sh-dot c-' + vm.hue;
+    st.dot.hidden = false;
+    P.ro = ro;
+    P.heading = vm.heading || '';
+    var name = typeof vm.name === 'string' && vm.name ? vm.name : vm.title;
+    P.applied = name;
+    if (st.doc.activeElement !== ni && ni.value !== name) ni.value = name;
+    ni.readOnly = ro;
+    P.syncHint();
+    // Read-only: the name and the Collapse row only (§8.3).
+    [P.swLab, P.swBox, P.moves, P.del].forEach(function (x) { x.hidden = ro; });
+    P.sw.forEach(function (b) { b.setAttribute('aria-checked', (vm.color || '') === b.getAttribute('data-color') ? 'true' : 'false'); });
+    P.up.disabled = !!vm.first;
+    P.down.disabled = !!vm.last;
+    P.fold.textContent = T(vm.collapsed ? 'Expand' : 'Collapse');
+    P.fold.setAttribute('aria-expanded', vm.collapsed ? 'false' : 'true');
+    if (ro) disarm(P);
+    st.ro = ro;
+    st.el.classList.toggle('ro', ro);
+  }
+  // Keyboard Delete on a header (§8.11): the group sheet with Delete armed.
+  SH.armDelete = function () {
+    var P = st.parts;
+    if (st.kind !== 'group' || !P || !P.del || P.del.hidden) return false;
+    if (!P.armed) arm(P);
+    return true;
+  };
+  SH.deleteArmed = function () { return st.kind === 'group' && !!st.parts && !!st.parts.armed; };
+  SH.groupId = function () { return st.kind === 'group' ? st.id : null; };
+
+  /*
+   * G3 More > Groups (§8.6): openGroups({title, rows: [{id, title, hue, meta,
+   * first, last}], readOnly, focus: {id, dir}, open(id), move(id, dir),
+   * add()}, detent). One row button per group (roving, like the Task list)
+   * that opens its group sheet, with Move up and Move down beside it, then
+   * "Add group". The sheet's kind is spec.kind ('groups').
+   */
+  SH.openGroups = function (spec, detent) {
+    open('list', null, spec, detent, spec.title || '', null);
+    var box = el('div', 'sh-glist', null, st.body), rows = [], focusEl = null;
+    box.setAttribute('role', 'list');
+    (spec.rows || []).forEach(function (r) {
+      var li = el('div', 'sh-gli', null, box);
+      li.setAttribute('role', 'listitem');
+      li.setAttribute('data-id', r.id);
+      var b = button('sh-trow', null, li, function () { if (spec.open) spec.open(r.id); });
+      b.setAttribute('data-id', r.id);
+      b.setAttribute('tabindex', '-1');
+      if (r.aria) b.setAttribute('aria-label', r.aria);
+      var top = el('span', 'sh-tr1', null, b);
+      el('span', 'sh-dot c-' + (r.hue || 'slate'), null, top).setAttribute('aria-hidden', 'true');
+      el('span', 'sh-tt', r.title, top);
+      if (r.meta) el('span', 'sh-tm', r.meta, b);
+      rows.push(b);
+      var arrows = {};
+      if (!spec.readOnly) {
+        [[-1, '↑', 'Move up', r.first], [1, '↓', 'Move down', r.last]].forEach(function (a) {
+          var ab = arrows[a[0]] = button('sh-garrow', a[1], li, function () { if (!ab.disabled && spec.move) spec.move(r.id, a[0]); });
+          ab.setAttribute('aria-label', T(a[2]));
+          ab.setAttribute('data-dir', String(a[0]));
+          ab.disabled = !!a[3];
+        });
+      }
+      // After a move the focus stays on that row's arrow (the other one at an end).
+      if (spec.focus && spec.focus.id === r.id) {
+        var same = arrows[spec.focus.dir], other = arrows[-spec.focus.dir];
+        focusEl = !spec.focus.dir ? b : same && !same.disabled ? same : other && !other.disabled ? other : b;
+      }
+    });
+    if (rows.length) (focusEl && focusEl.classList.contains('sh-trow') ? focusEl : rows[0]).setAttribute('tabindex', '0');
+    if (!spec.readOnly) {
+      var add = button('sh-btn sh-gadd', T('Add group'), st.body, function () { if (spec.add) spec.add(); });
+      add.setAttribute('data-action', 'add-group');
+    }
+    if (focusEl) { if (focusEl.classList.contains('sh-trow')) roveTo(rows, focusEl); else { try { focusEl.focus({ preventScroll: false }); } catch (e) { focusEl.focus(); } } }
+    else focusTitle();
+    return true;
+  };
 
   /*
    * openMenu({title, items: [{label, run, danger, disabled, hint, keep}]}, detent)
@@ -540,13 +936,30 @@
     var rowId = a && a.classList && a.classList.contains('sh-trow') ? a.getAttribute('data-id') : null;
     if (st.kind === 'task') {
       var armed = !!(st.parts && st.parts.armed);
+      // G0: typed name text survives the relabel (it is not applied here).
+      var typed = st.parts && st.parts.name ? st.parts.name.value : null;
       disarm();
       while (st.body.firstChild) st.body.removeChild(st.body.firstChild);
       buildTask();
       var vm = st.ctx.task ? st.ctx.task(st.id) : null;
       if (!vm) { SH.close(); return false; }
       fillTask(vm);
+      if (typed !== null && !st.parts.name.disabled && !st.parts.nameRo) { st.parts.name.value = typed; st.parts.syncRename(); }
       if (armed) arm(st.parts);
+    } else if (st.kind === 'group' || st.kind === 'group-new') {
+      // G3: the group sheet is rebuilt here like the task sheet; typed text is kept.
+      var gArmed = !!(st.parts && st.parts.armed), gTyped = st.parts && st.parts.name ? st.parts.name.value : null, create = st.kind === 'group-new';
+      disarm();
+      while (st.body.firstChild) st.body.removeChild(st.body.firstChild);
+      buildGroup(create);
+      if (create) { st.title.textContent = T('Add group'); st.parts.heading = (st.spec && st.spec.heading) || ''; }
+      else {
+        var gv = st.ctx.group ? st.ctx.group(st.id) : null;
+        if (!gv) { SH.close(); return false; }
+        fillGroup(gv);
+      }
+      if (gTyped !== null && !st.parts.name.readOnly) { st.parts.name.value = gTyped; st.parts.syncHint(); }
+      if (gArmed) arm(st.parts);
     } else {
       if (typeof reopen !== 'function') return false;
       var vals = st.parts && typeof st.parts.values === 'function' ? st.parts.values() : null;
@@ -612,7 +1025,9 @@
         cb.setAttribute('role', 'switch');
         cb.checked = f.value !== false;
         cb.disabled = off;
-        cb.addEventListener('change', function () { changed(f.name); });
+        // A switch can drive showIf too (G3 review round 1: the list heading rows).
+        vals[f.name] = cb.checked;
+        cb.addEventListener('change', function () { vals[f.name] = cb.checked; syncShow(); changed(f.name); });
         inputs[f.name] = cb;
         return;
       }
@@ -759,7 +1174,7 @@
         vals[name] = v;
         x.forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-value') === String(v) ? 'true' : 'false'); });
         syncShow();
-      } else if (x.type === 'checkbox') x.checked = !!v;
+      } else if (x.type === 'checkbox') { x.checked = !!v; vals[name] = !!v; syncShow(); }
       else if (x.type === 'date') x.value = typeof v === 'number' && st.ctx.day ? st.ctx.day(v) : '';
       else x.value = v == null ? '' : String(v);
     };
@@ -795,6 +1210,12 @@
 
   // Re-read the open task sheet (after a commit, a merge, a locale change).
   SH.update = function () {
+    if (st.kind === 'group') {
+      // G3: a group deleted under its sheet (undo, a merge) closes it.
+      var g = st.ctx.group ? st.ctx.group(st.id) : null;
+      if (!g) SH.close(); else fillGroup(g);
+      return;
+    }
     if (st.kind !== 'task') return;
     var vm = st.ctx.task ? st.ctx.task(st.id) : null;
     if (!vm) { SH.close(); return; }

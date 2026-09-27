@@ -9,7 +9,34 @@
 (function (global) {
   'use strict';
   var GT = global.GT, H = GT.host, B = GT.block, M = GT.model, S = GT.store, D = GT.dates, U = GT.undo, MD = GT.md, SPEC = GT.spec;
-  var A = SPEC.api, ok = A.ok, eq = A.eq, same = A.same, acase = A.acase;
+  var A = SPEC.api, ok = A.ok, eq = A.eq, same = A.same, acaseReal = A.acase;
+  /*
+   * G2 phase 2: the §9.1.5 walkthroughs (every case whose name starts with
+   * "(") run a second time over folded charts: noteText writes the list from
+   * the chart but the block with each group's noted tasks in reverse order,
+   * so every read of such a note folds back to the chart (composite key).
+   */
+  var FOLD = false, FOLDING = false, FOLDED_OPENS = 0;
+  function acase(name, fn) {
+    if (!FOLDING) return acaseReal(name, fn);
+    if (name.charAt(0) !== '(') return;
+    acaseReal('folded ' + name, function () {
+      FOLD = true;
+      return Promise.resolve().then(fn).then(function (v) { FOLD = false; return v; }, function (err) { FOLD = false; throw err; });
+    });
+  }
+  // Each group's noted tasks (ungrouped included) reversed in their slots.
+  function perturb(c) {
+    var d = M.toData(c), by = {};
+    d.tasks.forEach(function (t, k) { if (t.note) (by[String(t.group || null)] = by[String(t.group || null)] || []).push(k); });
+    var tasks = d.tasks.slice();
+    Object.keys(by).forEach(function (g) {
+      var ks = by[g], ts = ks.map(function (k) { return d.tasks[k]; }).reverse();
+      ks.forEach(function (k, i) { tasks[k] = ts[i]; });
+    });
+    d.tasks = tasks;
+    return C(d);
+  }
   var CH = 'chart-1', CH2 = 'chart-2';
 
   /* ------------------------------------------------------------ helpers */
@@ -20,8 +47,13 @@
   function key(c) { return c ? S.keyOf(c) : null; }
 
   // S: the chart in the note at open. x is t1.start, y is t2.end.
+  // G1: a list chart (settings.listHeading) unless the settings say
+  // otherwise, so every walkthrough runs over the delimited list.
+  var LIST = { list: true };
   function chartS(settings) {
-    return C({ v: 1, settings: settings || {}, tasks: [
+    var set = Object.assign({ listHeading: 'Tasks' }, settings || {});
+    if (set.listHeading === null) delete set.listHeading;
+    return C({ v: 1, settings: set, tasks: [
       { id: 't1', note: 'n1', title: 'Task one', start: '2026-10-03', end: '2026-10-10' },
       { id: 't2', note: 'n2', title: 'Task two', start: '2026-10-05', end: '2026-10-12' }] });
   }
@@ -30,7 +62,11 @@
   function color1(c, col) { return M.setTask(c, 't1', { color: col }).chart; }
   function xOf(c) { return D.format(M.task(c, 't1').start); }
   function yOf(c) { return D.format(M.task(c, 't2').end); }
-  function noteText(c, intro) { return (intro === undefined ? 'Intro text.' : intro) + '\n\n' + B.region(c, null, {}); }
+  function noteText(c, intro) {
+    var region = B.region(c, null, LIST);
+    if (FOLD && B.listConf(c).on && B.listConf(c).h !== null) region = region.replace(B.fence(c), B.fence(perturb(c)));
+    return (intro === undefined ? 'Intro text.' : intro) + '\n\n' + region;
+  }
 
   function frames() {
     var q = [];
@@ -89,7 +125,8 @@
   function oldEntry(base, chart, at, owner) {
     return { at: at || 1000, owner: owner || 'st-earlier', baseKey: key(base), base: M.toData(base), chart: M.toData(chart) };
   }
-  function noteChart(e, id) { return B.read(e.mock.content(id || CH)).chart; }
+  // The chart the note describes (G2: the list is folded in).
+  function noteChart(e, id) { return B.read(e.mock.content(id || CH), LIST).chart; }
   function seedFor(S0, more, intro) {
     return [{ id: CH, title: 'Plan', content: noteText(S0, intro) },
       { id: 'n1', title: 'Task one', type: 'task' }, { id: 'n2', title: 'Task two', type: 'task' }].concat(more || []);
@@ -107,10 +144,11 @@
     var id = o.chart || CH;
     return e.st.boot().then(function () {
       var content = e.mock.content(id);
-      return e.st.open(o.read === false || content === null ? id : { noteId: id, read: B.read(content) });
+      return e.st.open(o.read === false || content === null ? id : { noteId: id, read: B.read(content), text: content });
     }).then(function (r) {
       e.open = r;
       e.s = r.session;
+      if (FOLD && e.s && typeof e.s.key === 'string' && e.s.key.indexOf('#') > 0) FOLDED_OPENS++;
       return e.s && o.wait !== false ? Promise.all([e.s.checked, e.s.resolved]) : null;
     }).then(function () { return o.wait === false ? null : settle(e); }).then(function () { return e; });
   }
@@ -426,8 +464,8 @@
         ok('(f) the frame writes {E, B+E}', entryIs(stored(e), E, BE), show(stored(e)));
         return e.mock.release();
       }).then(function () { return settle(e); }).then(function () {
-        var fr = B.read(e.mock.content(CH));
-        eq('(f) the written region equals the serialised s.live', fr.region.text, B.region(e.s.live, e.s.summaries(), { embedOutside: false }));
+        var fr = B.read(e.mock.content(CH), LIST);
+        eq('(f) the written region equals the serialised s.live', fr.region.text, B.region(e.s.live, e.s.summaries(), { list: true, embedOutside: false }));
         ok('(f) agree', S.same(e.s.base, BE));
         e.fr.run();
         return settle(e);
@@ -680,7 +718,7 @@
     function twoCharts(S1, S2) {
       return seedFor(S1).concat([{ id: CH2, title: 'Plan 2', content: noteText(S2) }, { id: 'n3', title: 'Task three', type: 'task' }]);
     }
-    var S2 = C({ v: 1, tasks: [{ id: 'u1', note: 'n3', title: 'Task three', start: '2026-11-02', end: '2026-11-04' }] });
+    var S2 = C({ v: 1, settings: { listHeading: 'Tasks' }, tasks: [{ id: 'u1', note: 'n3', title: 'Task three', start: '2026-11-02', end: '2026-11-04' }] });
     var B2 = M.setDates(S2, 'u1', day('2026-11-05'), day('2026-11-06')).chart;
 
     acase('(l) chart switch with unsaved edits', function () {
@@ -874,7 +912,7 @@
         return e.st.convertNote(CH, S.chartOf(e.open.entry.chart));
       }).then(function (res) {
         ok('(p) none: Recreate appends a region holding A', res.ok && S.same(noteChart(e), A5), JSON.stringify(res && res.reason));
-        eq('(p) none: the body is kept', e.mock.content(CH).indexOf('The block is gone.\n\n```synapse-gantt') === 0 || e.mock.content(CH).indexOf('The block is gone.\n\n- [') === 0, true);
+        eq('(p) none: the body is kept', e.mock.content(CH).indexOf('The block is gone.\n\n```synapse-gantt') === 0 || e.mock.content(CH).indexOf('The block is gone.\n\n## Tasks\n\n- [') === 0, true);
         return e.st.session.checked;
       }).then(function () { return settle(e); }).then(function () {
         eq('(p) none: the open that follows deleted the entry', stored(e), null);
@@ -1024,7 +1062,7 @@
       m0.setState({ v: 1, journal: jmap(CH, oldEntry(S0, A5)) });
       e = env({ seed: seedFor(S0), storage: storage, mock: { latency: { loadAppState: 500 } } });
       e.st.boot();
-      return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)) }).then(function (o) {
+      return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)), text: e.mock.content(CH) }).then(function (o) {
         e.s = o.session;
         ok('(t) first paint needs no bridge call', S.same(e.s.live, S0) && e.mock.count('runQuery') <= 2);
         ok('(t) read-only until the load resolves', e.st.ui().readOnly);
@@ -1045,7 +1083,7 @@
     acase('(t) variant: no entry', function () {
       var e = env({ seed: seedFor(S0), mock: { latency: { loadAppState: 60 } } });
       e.st.boot();
-      return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)) }).then(function (o) {
+      return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)), text: e.mock.content(CH) }).then(function (o) {
         e.s = o.session;
         ok('(t) variant: read-only before the load', e.st.ui().readOnly && !e.st.commit(A5));
         return e.s.checked;
@@ -1062,7 +1100,7 @@
       var e = env({ seed: seedFor(S0), storage: storage });
       e.st.launch.mode = mode || 'manual';
       e.mock.failLoads(fails);
-      return e.st.boot().then(function () { return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)) }); }).then(function (o) {
+      return e.st.boot().then(function () { return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)), text: e.mock.content(CH) }); }).then(function (o) {
         e.s = o.session;
         return e.s.checked;
       }).then(function () { return e; });
@@ -1137,7 +1175,7 @@
     // (u) Two full instances over the same notes and appState.
     function instanceY(x, o) {
       var y = env({ db: x.mock.db, storage: x.storage, mock: Object.assign({ approvalMs: 200 }, o || {}) });
-      return y.st.boot().then(function () { return y.st.open({ noteId: CH, read: B.read(y.mock.content(CH)) }); }).then(function (r) {
+      return y.st.boot().then(function () { return y.st.open({ noteId: CH, read: B.read(y.mock.content(CH)), text: y.mock.content(CH) }); }).then(function (r) {
         y.open = r; y.s = r.session;
         return y.s.checked;
       }).then(function () { return settle(y); }).then(function () { return y; });
@@ -1303,7 +1341,7 @@
       var e = env({ seed: seedFor(S0) });
       e.st.launch.mode = 'manual';
       e.mock.failLoads(fails);
-      return e.st.boot().then(function () { return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)) }); }).then(function (o) {
+      return e.st.boot().then(function () { return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)), text: e.mock.content(CH) }); }).then(function (o) {
         e.s = o.session;
         return e.s.checked;
       }).then(function () { return e; });
@@ -2006,7 +2044,7 @@
     var BIG = JSON.parse(SPEC.api.fix('big.json'));
     function bigSeed(settings, withContent) {
       var c = C(Object.assign({}, BIG, { settings: settings }));
-      var notes = [{ id: 'big-chart', title: 'Big', content: 'Big chart.\n\n' + B.region(c, null, {}) }];
+      var notes = [{ id: 'big-chart', title: 'Big', content: 'Big chart.\n\n' + B.region(c, null, LIST) }];
       c.tasks.forEach(function (t, i) {
         var n = { id: t.note, title: t.title, type: 'task', status: i % 3 ? 'todo' : 'in_progress' };
         if (i % 4 === 0) n.subnotes = [{ name: 'a', isCompleted: true }, { name: 'b', isCompleted: false }];
@@ -2020,7 +2058,7 @@
       var e = env({ seed: sd.notes, storage: storage, db: db });
       return e.st.boot().then(function () {
         e.mock.resetCounts();
-        return e.st.open({ noteId: 'big-chart', read: B.read(e.mock.content('big-chart')) });
+        return e.st.open({ noteId: 'big-chart', read: B.read(e.mock.content('big-chart')), text: e.mock.content('big-chart') });
       }).then(function (o) {
         e.s = o.session;
         return e.s.resolved;
@@ -2286,9 +2324,11 @@
         return e.st.createChart({ title: 'New plan', intro: 'Why.', notes: [{ id: 'n1' }] });
       }).then(function (r) {
         ok('createChart: ok', r.ok && !!r.id);
-        var content = e.mock.content(r.id), fr = B.read(content);
+        var content = e.mock.content(r.id), fr = B.read(content, LIST);
         ok('createChart: intro then region', content.indexOf('Why.\n\n') === 0 && fr.status === 'ok');
         eq('createChart: the localised section is stored', fr.chart.settings.progressSection, GT.i18n.ZH.Checklist);
+        eq('createChart: the localised list heading is stored (G1)', fr.chart.settings.listHeading, '任务');
+        ok('createChart: the note starts the delimited list at ## 任务 (G1)', content.indexOf('Why.\n\n## 任务\n\n- [') === 0, content);
         ok('createChart: the note seeded its task dates', D.format(fr.chart.tasks[0].start) === '2026-10-01' && D.format(fr.chart.tasks[0].end) === '2026-10-04');
         ok('createChart: the session took its region from the note', e.st.session.region === fr.region.text);
         eq('createChart: one saveNotes call', e.mock.count('saveNotes'), 1);
@@ -2839,7 +2879,570 @@
     });
   }
 
+  /* ============ G1 (task-groups plan §5, §6.4, §10.1): the list in the store */
+
+  var GATE = { list: true, listDefault: 'Tasks' };
+  var TASKS = [['n-kick', 'Kickoff'], ['n-int', 'Customer interviews'], ['n-comp', 'Competitive teardown'],
+    ['n-sync', 'Sync engine'], ['n-beta', 'Beta cut']].map(function (x) { return { id: x[0], title: x[1], type: 'task' }; });
+  function listSeed(text) { return [{ id: CH, title: 'Plan', content: text }].concat(TASKS); }
+  function lworld(name, o) { return world(Object.assign({ seed: listSeed(fix(name)) }, o || {})); }
+  function ups(e) { return e.mock.updates; }
+  function lastUp(e) { var u = ups(e); return u.length ? u[u.length - 1] : null; }
+  function lines(t) { return t.split('\n'); }
+  // Lines of `a` missing from `b` (each line counted once, blank lines ignored).
+  function lost(a, b) {
+    var have = {};
+    lines(b).forEach(function (l) { have[l] = (have[l] || 0) + 1; });
+    return lines(a).filter(function (l) {
+      if (!/\S/.test(l)) return false;
+      if (have[l]) { have[l]--; return false; }
+      return true;
+    });
+  }
+  function headCount(t, h) { return lines(t).filter(function (l) { return l === h; }).length; }
+  var fix = SPEC.api.fix;
+  function contentReads(e) { return e.mock.queries.filter(function (q) { return /SELECT content,/.test(String(q.sql || q)); }).length; }
+
+  function listStoreSpec() {
+    acase('G1 legacy: open defaults the heading; the first save migrates, the second writes nothing', function () {
+      var e, text0 = fix('list-legacy-migrate.md'), fr0 = B.read(text0), n0;
+      var M1 = [['8f0c1e2a-5b7d-4c11-9a0e-2f6b3c9d1e01', 'Customer interviews'], ['1b7d4e90-0c2a-4f5e-8d61-7a3b2c1d0e02', 'Competitive teardown'],
+        ['77aa3c21-9e4f-4b6d-a0c8-5d2e1f3a4b03', 'Sync engine'], ['c3e98a10-6d5b-4e2f-b1a7-0c9d8e7f6a04', 'Beta cut']]
+        .map(function (x) { return { id: x[0], title: x[1], type: 'task' }; });
+      return world({ approved: true, seed: [{ id: CH, title: 'Plan', content: text0 }].concat(M1) }).then(function (w) {
+        e = w;
+        eq('G1 legacy: the chart gets the locale default heading', e.s.live.settings.listHeading, 'Tasks');
+        ok('G1 legacy: ... the key is composite', e.s.key !== fr0.key && e.s.key.indexOf(fr0.key + '#') === 0);
+        ok('G1 legacy: ... live equals base (nothing unsaved)', S.same(e.s.live, e.s.base));
+        eq('G1 legacy: ... the region is main spec §5.6\'s', e.s.region, fr0.region.text);
+        eq('G1 legacy: ... no write and no journal entry at open', e.mock.count('updateNotes') + ':' + JSON.stringify(stored(e)), '0:null');
+        eq('G1 legacy: ... no banner, pill saved', e.st.ui().banner + ':' + e.st.ui().pill, 'null:saved');
+        n0 = e.mock.count('updateNotes');
+        e.st.commit(M.setTask(e.s.live, 't2', { color: 'rose' }).chart);
+        e.fr.run();
+        return settle(e);
+      }).then(function () {
+        eq('G1 legacy: the first save is one updateNotes with one replace_text', e.mock.count('updateNotes') - n0 + ':' + lastUp(e).length, '1:1');
+        var c = lastUp(e)[0].modification.content, text1 = e.mock.content(CH);
+        eq('G1 legacy: ... old_text is the legacy region', c.old_text, fr0.region.text);
+        var parts = B.regionParts(e.s.live, e.s.summaries(), { list: true });
+        eq('G1 legacy: ... everything outside the region is byte-identical', text1, text0.slice(0, fr0.region.start) + parts.text + text0.slice(fr0.region.end));
+        ok('G1 legacy: ... the new region is ## Tasks with ### markers', text1.indexOf('Owners are in each task note.\n\n## Tasks\n\n### Discovery\n- [Customer interviews](') > 0 &&
+          text1.indexOf('\n\n### Build\n- [Sync engine](') > 0, text1);
+        var fr1 = B.read(text1, GATE);
+        ok('G1 legacy: ... it reads back as a list with the heading in the JSON, key = body key', !!fr1.list && !fr1.legacy && fr1.key === fr1.bodyKey && fr1.chart.settings.listHeading === 'Tasks');
+        eq('G1 legacy: ... no bold group line is left', /- \*\*/.test(text1), false);
+        e.fr.run();
+        return settle(e);
+      }).then(function () {
+        var fr1 = B.read(e.mock.content(CH), GATE);
+        eq('G1 legacy: ... the journal is empty after agree', stored(e), null);
+        eq('G1 legacy: ... wroteKey is the body key', e.s.wroteKey, fr1.bodyKey);
+        n0 = e.mock.count('updateNotes');
+        return e.st.save();
+      }).then(function (r) {
+        ok('G1 legacy: the second save writes nothing (byte-identical)', r.ok && e.mock.count('updateNotes') === n0);
+      });
+    });
+
+    acase('G1 legacy: a zh-CN store migrates to ## 任务', function () {
+      var e;
+      return world({ approved: true, mock: { locale: 'zh-CN' }, seed: [{ id: CH, title: 'Plan', content: noteText(chartS({ listHeading: null })) },
+        { id: 'n1', title: 'Task one', type: 'task' }, { id: 'n2', title: 'Task two', type: 'task' }] }).then(function (w) {
+        e = w;
+        eq('G1 zh: the default heading', e.s.live.settings.listHeading, '任务');
+        e.st.commit(setX(e.s.live, '2026-10-05'));
+        return settle(e);
+      }).then(function () {
+        ok('G1 zh: the saved note starts the list at ## 任务', e.mock.content(CH).indexOf('Intro text.\n\n## 任务\n\n- [Task one](') === 0, e.mock.content(CH));
+      });
+    });
+
+    acase('G1 attached: blocks survive saves, a move to another group and a removal', function () {
+      var e, text0 = fix('list-attached-notes.md');
+      function after(t, owner) { var ls = lines(t), i = ls.findIndex(function (l) { return l.indexOf(owner) >= 0; }); return i >= 0 ? ls[i + 1] : null; }
+      return lworld('list-attached-notes.md', { approved: true }).then(function (w) {
+        e = w;
+        eq('G1 attached: s.attach from the open read', JSON.stringify([e.s.attach['g:g2'], e.s.attach['t:t3']]), JSON.stringify([['  Scope: two sprints.'], ['  - waiting on legal']]));
+        var idx = e.s.live.tasks.length - 1;
+        e.st.commit(M.reorder(e.s.live, 't3', idx, 'g3').chart);
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH);
+        eq('G1 attached: one save for the move', e.mock.count('updateNotes'), 1);
+        ok('G1 attached: Sync engine is under Launch now', t.indexOf('### Launch\n- [Sync engine](') > 0, t);
+        eq('G1 attached: ... its note line moved with it', after(t, '[Sync engine]('), '  - waiting on legal');
+        eq('G1 attached: ... the group block stays under Build', after(t, '### Build'), '  Scope: two sprints.');
+        same('G1 attached: ... no line of the note was lost', lost(text0, t).filter(function (l) { return l.indexOf('synapseresource') < 0 && !/^#/.test(l) && !/^ ?[{\]"]/.test(l); }), []);
+        same('G1 attached: s.attach survives agree', e.s.attach['t:t3'], ['  - waiting on legal']);
+        e.st.commit(M.removeTask(e.s.live, 't3').chart);
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH);
+        eq('G1 attached: after removing Sync engine, its block re-homes to the owner before it', after(t, '### Launch'), '  - waiting on legal');
+        eq('G1 attached: ... exactly once', t.split('  - waiting on legal').length - 1, 1);
+        ok('G1 attached: ... and the Build block is still there', t.indexOf('### Build\n  Scope: two sprints.\n- ◆ [Beta cut](') > 0, t);
+        var n = e.mock.count('updateNotes');
+        return e.st.save().then(function () { eq('G1 attached: the next save writes nothing', e.mock.count('updateNotes'), n); });
+      });
+    });
+
+    acase('G1 attached: s.attach survives absorb and anchorToRead; spill lands above the region', function () {
+      var e;
+      return lworld('list-attached-notes.md', { approved: true }).then(function (w) {
+        e = w;
+        // An outside edit inside the region (a line typed above the fence):
+        // the save misses, re-reads, merges and re-anchors.
+        e.mock.setNote(CH, e.mock.content(CH).replace('### Launch\n', '### Launch\nAsk Ana about the date.\n'));
+        e.st.commit(setColor(e.s.live));
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH);
+        ok('G1 absorb: the save went through after the re-read', /"color":"rose"/.test(t) && e.mock.count('updateNotes') === 2, t);
+        ok('G1 absorb: the typed line is kept under Launch', t.indexOf('### Launch\n\nAsk Ana about the date.\n\n```synapse-gantt') > 0, t);
+        same('G1 absorb: s.attach holds it after the re-anchor and agree', e.s.attach['g:g3'], ['Ask Ana about the date.']);
+        e.mock.setNote(CH, e.mock.content(CH));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        e.s.attach = {};
+        ok('G1 anchorToRead: re-anchors', e.st.anchorToRead());
+        same('G1 anchorToRead: ... and takes the blocks of that read', e.s.attach['g:g3'], ['Ask Ana about the date.']);
+        e.st.commit(M.setSettings(e.s.live, { mirror: false }).chart);
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH);
+        ok('G1 spill: list off writes the blocks above the fence as user text', t.indexOf('Plan for the release.\n\n  Scope: two sprints.\n\n  - waiting on legal\n\nAsk Ana about the date.\n\n```synapse-gantt') === 0, t);
+        eq('G1 spill: ... no task line is left', t.indexOf('synapseresource://note/'), -1);
+        var n = e.mock.count('updateNotes');
+        return e.st.save().then(function () { eq('G1 spill: the next save writes nothing', e.mock.count('updateNotes'), n); });
+      });
+    });
+    function setColor(c) { return M.setTask(c, 't1', { color: 'rose' }).chart; }
+
+    acase('G1 missing heading: saves held, banner, Restore heading in one replace_text, then the held edit saves', function () {
+      var e, text0 = fix('list-missing-heading-prose.md'), fb = B.read(text0, GATE).fallback, res;
+      return lworld('list-missing-heading-prose.md', { approved: true }).then(function (w) {
+        e = w;
+        eq('G1 missing: the banner', e.st.ui().banner, 'heading-missing');
+        same('G1 missing: ... names the heading, no Use as offer', e.st.ui().missing, { heading: 'Tasks', useAs: null });
+        ok('G1 missing: the region is the fence only', e.s.region.indexOf('```synapse-gantt') === 0);
+        ok('G1 missing: a commit is accepted', e.st.commit(setColor(e.s.live)));
+        e.fr.run();
+        return settle(e);
+      }).then(function () {
+        eq('G1 missing: no updateNotes (the save is held)', e.mock.count('updateNotes'), 0);
+        eq('G1 missing: ... the save ended as heading-missing', e.s.lastResult && e.s.lastResult.reason, 'heading-missing');
+        eq('G1 missing: ... the pill', e.st.ui().pill, 'heading-missing');
+        ok('G1 missing: ... the journal keeps the edit', !!stored(e) && S.same(S.chartOf(stored(e).chart), e.s.live));
+        e.mock.resetCounts();
+        return e.st.save();
+      }).then(function (r) {
+        eq('G1 missing: a pill-tap save is held too', r.reason + ':' + e.mock.count('updateNotes'), 'heading-missing:0');
+        eq('G1 missing: ... without reading the note', contentReads(e), 0);
+        return e.st.restoreHeading();
+      }).then(function (r) {
+        res = r;
+        return settle(e);
+      }).then(function () {
+        ok('G1 restore: ok', res.ok, JSON.stringify(res));
+        var first = ups(e)[0];
+        eq('G1 restore: the first updateNotes has one entry', first.length, 1);
+        same('G1 restore: ... a replace_text of the fallback with the heading after P0', first[0].modification.content,
+          { action: 'replace_text', old_text: fb.text, new_text: fb.restore });
+        eq('G1 restore: then the held edit saved (two updateNotes in all)', e.mock.count('updateNotes'), 2);
+        e.fr.run();
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH), fr = B.read(t, GATE);
+        ok('G1 restore: the next read is normal', !fr.missing && !!fr.list && /"color":"rose"/.test(t), t);
+        eq('G1 restore: ... one list heading', headCount(t, '## Tasks'), 1);
+        eq('G1 restore: ... each task line once', t.split('[Kickoff](').length - 1, 1);
+        same('G1 restore: ... no line lost', lost(text0, t).filter(function (l) { return !/synapseresource|^```|^\{|^"|^ \{|^\]/.test(l); }), []);
+        eq('G1 restore: ... banner gone, journal empty', e.st.ui().banner + ':' + JSON.stringify(stored(e)), 'null:null');
+      });
+    });
+
+    acase('G1 missing heading: deleted while edits wait: the save misses, re-reads and is held', function () {
+      var e;
+      return lworld('list-basic.md', { mode: 'manual' }).then(function (w) {
+        e = w;
+        e.st.commit(setColor(e.s.live));
+        e.mock.setNote(CH, e.mock.content(CH).replace('## Tasks\n\n', ''));
+        return e.st.save();
+      }).then(function (r) {
+        var t = e.mock.content(CH);
+        eq('G1 deleted: the save ends held after the re-read', r.reason, 'heading-missing');
+        eq('G1 deleted: ... one missed write only, the note unchanged', e.mock.count('updateNotes') + ':' + (t.indexOf('## Tasks') < 0), '1:true');
+        eq('G1 deleted: ... the banner and pill', e.st.ui().banner + ':' + e.st.ui().pill, 'heading-missing:heading-missing');
+        eq('G1 deleted: ... one list in the note', t.split('[Kickoff](').length - 1, 1);
+      });
+    });
+
+    acase('G1 missing heading: restored in the editor while edits wait: the next save re-reads first', function () {
+      var e;
+      return lworld('list-missing-heading-prose.md', { mode: 'manual' }).then(function (w) {
+        e = w;
+        e.st.commit(setColor(e.s.live));
+        e.mock.setNote(CH, B.restoreHeading(e.mock.content(CH)));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        eq('G1 editor restore: the resume clears the banner, edits still unsaved', e.st.ui().banner + ':' + e.st.ui().pill, 'null:unsaved');
+        ok('G1 editor restore: ... the region is still the fence of the earlier read', !e.s.anchorOn && e.s.region.indexOf('```') === 0);
+        return e.st.save();
+      }).then(function (r) {
+        var t = e.mock.content(CH);
+        ok('G1 editor restore: the save writes', r.ok && /"color":"rose"/.test(t), JSON.stringify(r));
+        eq('G1 editor restore: ... one list heading and one list', headCount(t, '## Tasks') + ':' + (t.split('[Kickoff](').length - 1), '1:1');
+        ok('G1 editor restore: ... the prose line kept', t.indexOf('Next: hire a PM.') > 0);
+      });
+    });
+
+    /* ---- review round 1 ---- */
+
+    function oneList(name, t) {
+      eq(name + ': one list heading', headCount(t, '## Tasks'), 1);
+      var bad = TASKS.filter(function (n) { return t.indexOf('note/' + n.id + '?via=gantt)') >= 0 && t.split('note/' + n.id + '?via=gantt)').length - 1 !== 1; });
+      same(name + ': ... one line per task', bad.map(function (n) { return n.id; }), []);
+      eq(name + ': ... the note line under Sync engine once, in place', t.split('  - waiting on legal').length - 1 + ':' + (t.indexOf('[Sync engine](synapseresource://note/n-sync?via=gantt) · 2026-10-12 → 2026-11-06\n  - waiting on legal') > 0), '1:true');
+    }
+    acase('G1 r1: a resume that reloads silently reads the list (then a save writes one list)', function () {
+      var e;
+      return lworld('list-attached-notes.md', { approved: true }).then(function (w) {
+        e = w;
+        e.mock.setNote(CH, e.mock.content(CH).replace('"start":"2026-09-30"', '"start":"2026-09-29"'));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        ok('G1 r1 reload: the outside change was reloaded', D.format(M.task(e.s.live, 't0').start) === '2026-09-29' && e.lives.some(function (x) { return x.reload; }));
+        same('G1 r1 reload: ... with the blocks of the list', e.s.attach['t:t3'], ['  - waiting on legal']);
+        ok('G1 r1 reload: ... and the region from the heading', e.s.region.indexOf('## Tasks\n') === 0);
+        e.st.commit(setColor(e.s.live));
+        return settle(e);
+      }).then(function () { oneList('G1 r1 reload', e.mock.content(CH)); });
+    });
+
+    acase('G1 r1: a re-open (another instance\'s entry) reads the list (then a save writes one list)', function () {
+      var e;
+      return lworld('list-attached-notes.md').then(function (w) {
+        e = w;
+        var c = B.read(e.mock.content(CH)).chart;
+        e.mock.setState({ v: 1, journal: jmap(CH, oldEntry(c, setColor(c), 5000, 'st-other')) });
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        ok('G1 r1 reopen: the session was re-opened and offers the entry', e.lives.some(function (x) { return x.reopen; }) && e.st.ui().banner === 'restore');
+        same('G1 r1 reopen: ... with the blocks of the list', e.s.attach['t:t3'], ['  - waiting on legal']);
+        ok('G1 r1 reopen: ... and the region from the heading', e.s.region.indexOf('## Tasks\n') === 0);
+        e.st.journal.discard();
+        e.st.commit(M.setTask(e.s.live, 't2', { color: 'amber' }).chart);
+        return settle(e);
+      }).then(function () {
+        ok('G1 r1 reopen: the save wrote', /"color":"amber"/.test(e.mock.content(CH)));
+        oneList('G1 r1 reopen', e.mock.content(CH));
+      });
+    });
+
+    acase('G1 r1: a task listed twice stays ambiguous through five saves', function () {
+      var e, cols = ['rose', 'amber', 'teal', 'rose', 'amber'];
+      function syncLinks() { return e.mock.content(CH).split('note/n-sync?via=gantt)').length - 1; }
+      return lworld('list-copy-inside.md', { approved: true }).then(function (w) {
+        e = w;
+        same('G1 r1 copies: s.ambiguous from the open read', e.s.ambiguous, ['t3']);
+        return cols.reduce(function (p, col, k) {
+          return p.then(function () {
+            e.st.commit(M.setTask(e.s.live, 't1', { color: col }).chart);
+            return settle(e);
+          }).then(function () {
+            eq('G1 r1 copies: save ' + (k + 1) + ' keeps two lines for the task', syncLinks(), 2);
+            same('G1 r1 copies: save ' + (k + 1) + ' keeps it ambiguous', e.s.ambiguous, ['t3']);
+          });
+        }, P0());
+      }).then(function () {
+        var t = e.mock.content(CH);
+        eq('G1 r1 copies: five writes', e.mock.count('updateNotes'), 5);
+        ok('G1 r1 copies: both copies kept in their sections', t.indexOf('- [Competitive teardown](synapseresource://note/n-comp?via=gantt) · 2026-10-05 → 2026-10-14\n- [Sync engine](') > 0 &&
+          t.indexOf('### Build\n- [Sync engine](') > 0, t);
+        eq('G1 r1 copies: the JSON group is kept', M.task(e.s.live, 't3').group, 'g2');
+      });
+    });
+
+    acase('G1 r1: heading deleted after open, then Turn list off: the save writes (not held)', function () {
+      var e, t0;
+      return lworld('list-basic.md', { mode: 'manual' }).then(function (w) {
+        e = w;
+        t0 = e.mock.content(CH).replace('## Tasks\n\n', '');
+        e.mock.setNote(CH, t0);
+        e.st.commit(M.setSettings(e.s.live, { mirror: false }).chart);
+        return e.st.save();
+      }).then(function (r) {
+        // Manual mode makes one attempt: the miss re-reads and re-anchors.
+        eq('G1 r1 off: the first save misses and re-anchors, not held', r.reason + ':' + JSON.stringify(e.s.missing), 'retry-needed:null');
+        return e.st.save();
+      }).then(function (r) {
+        var t = e.mock.content(CH), at = t.indexOf('```synapse-gantt');
+        ok('G1 r1 off: the next save writes', r.ok && e.mock.count('updateNotes') === 2, JSON.stringify(r));
+        ok('G1 r1 off: ... mirror false, the lines above kept as they were', /"mirror":false/.test(t) && t.slice(0, at) === t0.slice(0, t0.indexOf('```synapse-gantt')));
+        eq('G1 r1 off: ... no banner', e.st.ui().banner, null);
+      });
+    });
+
+    acase('G1 r1: list off then on again over a headless list: held, then Restore heading gives one list', function () {
+      var e;
+      return lworld('list-missing-heading-prose.md', { approved: true }).then(function (w) {
+        e = w;
+        e.st.commit(M.setSettings(e.s.live, { mirror: false }).chart);
+        return settle(e);
+      }).then(function () {
+        eq('G1 r1 on again: the list-off save wrote', e.mock.count('updateNotes'), 1);
+        e.st.commit(M.setSettings(e.s.live, { mirror: true }).chart);
+        return settle(e);
+      }).then(function () {
+        eq('G1 r1 on again: the save is held (no second list below the old one)', e.mock.count('updateNotes') + ':' + (e.s.lastResult && e.s.lastResult.reason), '1:heading-missing');
+        eq('G1 r1 on again: ... the banner', e.st.ui().banner, 'heading-missing');
+        eq('G1 r1 on again: ... the note has no heading yet', headCount(e.mock.content(CH), '## Tasks'), 0);
+        return e.st.restoreHeading().then(function () { return settle(e); });
+      }).then(function () {
+        var t = e.mock.content(CH);
+        eq('G1 r1 on again: Restore heading and the held save', e.mock.count('updateNotes'), 3);
+        eq('G1 r1 on again: ... one list heading, one line per task', headCount(t, '## Tasks') + ':' + (t.split('[Kickoff](').length - 1), '1:1');
+        ok('G1 r1 on again: ... the block has the list on', !/"mirror":false/.test(t) && t.indexOf('Next: hire a PM.') > 0, t);
+      });
+    });
+
+    acase('G1 r1: Repair keeps the damaged block\'s own heading and level', function () {
+      var e, t0 = fix('list-malformed.md').replace('## Tasks', '### Todo').replace('"listHeading":"Tasks"', '"listHeading":"Todo","listLevel":3');
+      return world({ seed: listSeed(t0) }).then(function (w) {
+        e = w;
+        return e.st.repair('malformed');
+      }).then(function (r) {
+        var t = e.mock.content(CH), c = B.read(t, GATE).chart;
+        ok('G1 r1 repair: ok, the region starts at ### Todo', r.ok && t.indexOf('\n\n### Todo\n\n```synapse-gantt') > 0 && t.indexOf('## Tasks') < 0, t);
+        eq('G1 r1 repair: ... the block keeps heading and level', c.settings.listHeading + '|' + c.settings.listLevel, 'Todo|3');
+      });
+    });
+
+    acase('G1 r1: Recreate with a chart journaled before G1 writes the heading form', function () {
+      var e;
+      return world({ seed: [{ id: CH, title: 'Plan', content: 'Just text.' }] }).then(function (w) {
+        e = w;
+        return e.st.convertNote(CH, chartS({ listHeading: null }));
+      }).then(function (r) {
+        ok('G1 r1 recreate: the list starts at ## Tasks', r.ok && e.mock.content(CH).indexOf('Just text.\n\n## Tasks\n\n- [Task one](') === 0, e.mock.content(CH));
+      });
+    });
+
+    acase('G1 r1: Restore heading feeds the prompted-save detector', function () {
+      var e, n;
+      return lworld('list-missing-heading-prose.md').then(function (w) {
+        e = w;
+        n = e.st.launch.savesThisLaunch;
+        return e.st.restoreHeading();
+      }).then(function (r) {
+        ok('G1 r1 detect: one detection for the write', r.ok && e.st.launch.savesThisLaunch === n + 1);
+      });
+    });
+
+    // Coerce and merge of the three settings (§7.1, §7.3).
+    (function () {
+      function set(v) { return C({ v: 1, settings: v }).settings; }
+      eq('G1 coerce: listHeading kept', set({ listHeading: 'Tasks' }).listHeading, 'Tasks');
+      [' ', '', 5, null, ['Tasks']].forEach(function (v) {
+        var s = set({ listHeading: v });
+        ok('G1 coerce: listHeading ' + JSON.stringify(v) + ' is a shadow', s.listHeading === null && Object.prototype.hasOwnProperty.call(s._x, 'listHeading'));
+      });
+      [1, 5].forEach(function (v) { eq('G1 coerce: listLevel ' + v + ' kept', set({ listLevel: v }).listLevel, v); });
+      [0, 6, 2.5, '3', -1].forEach(function (v) {
+        var s = set({ listLevel: v });
+        ok('G1 coerce: listLevel ' + JSON.stringify(v) + ' is a shadow', s.listLevel === 2 && Object.prototype.hasOwnProperty.call(s._x, 'listLevel'));
+      });
+      eq('G1 coerce: seedSkip kept', set({ seedSkip: '0a1b2c3d' }).seedSkip, '0a1b2c3d');
+      ['0A1B2C3D', 'abc', '0a1b2c3d4', 12345678].forEach(function (v) {
+        var s = set({ seedSkip: v });
+        ok('G1 coerce: seedSkip ' + JSON.stringify(v) + ' is a shadow', s.seedSkip === null && Object.prototype.hasOwnProperty.call(s._x, 'seedSkip'));
+      });
+      eq('G1 coerce: defaults are not written, the keys follow syncDates',
+        JSON.stringify(M.settingsData(set({ listLevel: 2, listHeading: 'T', seedSkip: '0a1b2c3d', syncDates: true }))),
+        '{"syncDates":true,"listHeading":"T","seedSkip":"0a1b2c3d"}');
+      eq('G1 coerce: listLevel 3 is written', JSON.stringify(M.settingsData(set({ listLevel: 3 }))), '{"listLevel":3}');
+      var base = chartS({ listHeading: 'Tasks' }), zh = chartS({ listHeading: '任务' });
+      var m1 = M.merge3(base, base, zh);
+      ok('G1 merge: the heading from another locale over an untouched base: theirs, no conflict', m1.chart.settings.listHeading === '任务' && !m1.conflicts.length);
+      var m2 = M.merge3(chartS({ listHeading: null }), base, zh);
+      eq('G1 merge: two defaults over a legacy base conflict on settings.listHeading', m2.conflicts.map(function (x) { return x.key; }).join(','), 'settings.listHeading');
+    })();
+
+    acase('G1 missing heading: Use “Taks” as the list heading (manual), and Restore heading below it', function () {
+      var e, text0 = fix('list-missing-heading-typo.md'), r1;
+      return lworld('list-missing-heading-typo.md', { mode: 'manual' }).then(function (w) {
+        e = w;
+        same('G1 useAs: offered for the one-heading P0', e.st.ui().missing, { heading: 'Tasks', useAs: 'Taks' });
+        e.st.commit(setColor(e.s.live));
+        return e.st.save();
+      }).then(function (r) {
+        eq('G1 useAs: the edit is held', r.reason + ':' + e.mock.count('updateNotes'), 'heading-missing:0');
+        return e.st.useListHeading();
+      }).then(function (r) {
+        r1 = r;
+        ok('G1 useAs: ok, one commit with an inverse', r.ok && r.inverse.length === 1, JSON.stringify(r));
+        eq('G1 useAs: live takes the heading', e.s.live.settings.listHeading, 'Taks');
+        eq('G1 useAs: ... the missing state is left, no write yet (manual)', e.st.ui().banner + ':' + e.mock.count('updateNotes') + ':' + e.st.ui().pill, 'null:0:unsaved');
+        ok('G1 useAs: ... the region starts at ## Taks', e.s.region.indexOf('## Taks\n\n- [Kickoff](') === 0);
+        // Review round 1: a resume before the save reads the note, whose
+        // block still says "Tasks"; the live heading decides.
+        e.mock.setNote(CH, e.mock.content(CH));
+        return e.mock.resume().then(function () { return settle(e); });
+      }).then(function () {
+        eq('G1 useAs: after a resume the chart is not back in the missing state', e.st.ui().banner + ':' + e.st.ui().pill + ':' + JSON.stringify(e.s.missing), 'null:unsaved:null');
+        return e.st.save();
+      }).then(function (r) {
+        var t = e.mock.content(CH);
+        ok('G1 useAs: the held save proceeds with one updateNotes', r.ok && e.mock.count('updateNotes') === 1, JSON.stringify(r));
+        ok('G1 useAs: ... the list stays under ## Taks with the edit', t.indexOf('Plan for the release.\n\n## Taks\n\n- [Kickoff](') === 0 && /"listHeading":"Taks"/.test(t) && /"color":"rose"/.test(t), t);
+        eq('G1 useAs: ... one list', t.split('[Kickoff](').length - 1, 1);
+        return e.st.undo({ undo: function () { return { chart: M.applyPatch(e.s.live, r1.inverse).chart, effects: [] }; }, revert: function () {} });
+      }).then(function () {
+        eq('G1 useAs: its inverse restores the heading setting', e.s.live.settings.listHeading, 'Tasks');
+        return lworld('list-missing-heading-typo.md', { approved: true });
+      }).then(function (w) {
+        e = w;
+        return e.st.restoreHeading();
+      }).then(function (r) {
+        var t = e.mock.content(CH);
+        ok('G1 typo: Restore heading instead inserts ## Tasks below ## Taks', r.ok && t.indexOf('Plan for the release.\n\n## Taks\n\n## Tasks\n\n- [Kickoff](') === 0, t);
+        eq('G1 typo: ... one write', e.mock.count('updateNotes'), 1);
+        ok('G1 typo: ... nothing else changed', t === text0.replace('## Taks\n\n', '## Taks\n\n## Tasks\n\n'));
+      });
+    });
+
+    acase('G1 missing heading: Turn list off saves the fence and leaves the headless lines as text', function () {
+      var e, text0 = fix('list-missing-heading-prose.md');
+      return lworld('list-missing-heading-prose.md', { approved: true }).then(function (w) {
+        e = w;
+        e.st.commit(M.setSettings(e.s.live, { mirror: false }).chart);
+        return settle(e);
+      }).then(function () {
+        var t = e.mock.content(CH), at = t.indexOf('```synapse-gantt');
+        eq('G1 list off: one updateNotes', e.mock.count('updateNotes'), 1);
+        eq('G1 list off: every line above the fence is untouched', t.slice(0, at), text0.slice(0, text0.indexOf('```synapse-gantt')));
+        ok('G1 list off: ... the block says mirror false', /"mirror":false/.test(t));
+        eq('G1 list off: ... no banner', e.st.ui().banner, null);
+      });
+    });
+
+    acase('G1 malformed: Repair keeps the region\'s attached lines above the new region', function () {
+      var e;
+      return lworld('list-malformed.md').then(function (w) {
+        e = w;
+        eq('G1 repair: malformed', e.s.status, 'malformed');
+        return e.st.repair('malformed');
+      }).then(function (r) {
+        var t = e.mock.content(CH);
+        ok('G1 repair: ok', r.ok, JSON.stringify(r));
+        // Every link of a malformed region reads as FOREIGN, so the task lines are kept too.
+        ok('G1 repair: the region\'s lines come first as user text, then the new list region', t.indexOf('Plan for the release.\n\n- [Kickoff](synapseresource://note/n-kick?via=gantt) · 2026-09-30\nRemember the vendor call.\n\n' +
+          '- [Sync engine](synapseresource://note/n-sync?via=gantt) · 2026-10-12 → 2026-11-06\n  - owner: Ana\n\n## Tasks\n\n```synapse-gantt') === 0, t);
+        ok('G1 repair: ... the text after the chart is kept', /```\n\nAfter the chart\.$/.test(t), t);
+        eq('G1 repair: ... the new chart has the heading', B.read(t, GATE).chart.settings.listHeading, 'Tasks');
+      });
+    });
+
+    acase('G1 reconciliation: no banner on list-basic after open and after a save; edits and deletions', function () {
+      var e;
+      return lworld('list-basic.md', { approved: true }).then(function (w) {
+        e = w;
+        eq('G1 gap: no banner after open', e.st.mirrorGap(), null);
+        e.st.commit(setColor(e.s.live));
+        return settle(e);
+      }).then(function () {
+        e.mock.setNote(CH, e.mock.content(CH));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        ok('G1 gap: the resume read the note', typeof e.s.lastText === 'string');
+        eq('G1 gap: no banner after a save (no task reads as edited)', e.st.mirrorGap(), null);
+        eq('G1 gap: ... and none in the UI', e.st.ui().banner, null);
+        e.mock.setNote(CH, e.mock.content(CH).split('\n').map(function (l) { return l.indexOf('[Kickoff](') >= 0 ? l + ' (asked Sam)' : l; }).join('\n'));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        same('G1 gap: an annotated line inside the list is edited, not deleted', e.st.mirrorGap(), { deleted: [], edited: ['t0'] });
+        e.mock.setNote(CH, e.mock.content(CH).split('\n').filter(function (l) { return l.indexOf('[Kickoff](') < 0; }).join('\n'));
+        return e.mock.resume();
+      }).then(function () { return settle(e); }).then(function () {
+        same('G1 gap: a deleted line is deleted', e.st.mirrorGap(), { deleted: ['t0'], edited: [] });
+      });
+    });
+
+    acase('G1 checkOnOpen step 4 compares chart keys (a composite note key)', function () {
+      var L0 = chartS({ listHeading: null }), Lh = C(Object.assign(M.toData(L0), { settings: { listHeading: 'Tasks' } }));
+      var e;
+      return world({ S: L0, entry: oldEntry(setX(Lh, '2026-10-07'), Lh) }).then(function (w) {
+        e = w;
+        ok('G1 step 4: the note key is composite', e.s.key.indexOf('#') > 0);
+        return e.s.checked;
+      }).then(function (r) {
+        eq('G1 step 4: the entry equal to the defaulted note chart is dropped by step 4', r.kind + ':' + r.step, 'dropped:4');
+        return settle(e);
+      }).then(function () {
+        eq('G1 step 4: ... and deleted', stored(e), null);
+      });
+    });
+
+    acase('G1 (d) over a legacy chart: a crash during the migrating save, then open', function () {
+      var L0 = chartS({ listHeading: null }), e, A;
+      return world({ S: L0 }).then(function (w) {
+        e = w;
+        A = setX(e.s.live, '2026-10-05');
+        e.mock.holdUpdateNotes();
+        e.st.commit(A);
+        e.fr.run();
+        return settle(e);
+      }).then(function () {
+        ok('G1 (d): {S+h, A} at the crash', entryIs(stored(e), e.s.base, A));
+        e.mock.haltAfter('updateNotes');
+        return e.mock.release();
+      }).then(function () {
+        ok('G1 (d): the note holds A in the delimited form', S.same(B.read(e.mock.content(CH), GATE).chart, A) && e.mock.content(CH).indexOf('## Tasks') > 0);
+        return reopen(e);
+      }).then(function (r) {
+        eq('G1 (d): step 4, no banner', r.st.ui().banner, null);
+        ok('G1 (d): the chart shows A', S.same(r.s.live, A));
+        eq('G1 (d): the entry is gone', stored(r), null);
+      });
+    });
+
+    acase('G1 open: a launch read without the list gate is read again with it', function () {
+      var e;
+      return lworld('list-attached-notes.md', { read: false }).then(function (w) {
+        e = w;
+        var text = e.mock.content(CH), route = H.route({ notes: [{ id: CH, content: text, title: 'Plan' }], params: {} });
+        ok('G1 open: the route carries the note text', route.kind === 'chart' && route.text === text && !route.read.list);
+        e.mock.resetCounts();
+        return e.st.open({ noteId: CH, read: route.read, text: route.text });
+      }).then(function (o) {
+        ok('G1 open: with the text, the session has the list read (no bridge read)', o.ok && contentReads(e) === 0 && e.s !== o.session && o.session.attach['t:t3'][0] === '  - waiting on legal',
+          JSON.stringify([o.ok, e.mock.calls, o.session && o.session.attach]));
+        e.mock.resetCounts();
+        return e.st.open({ noteId: CH, read: B.read(e.mock.content(CH)) });
+      }).then(function (o) {
+        ok('G1 open: without the text, an ungated read is not used: the note is read', o.ok && contentReads(e) === 1 && o.session.region.indexOf('## Tasks') === 0 && o.session.attach['t:t3'][0] === '  - waiting on legal');
+      });
+    });
+  }
+
+  // G2 phase 2: the helpers dev/sync_spec.js builds its store cases on.
+  SPEC.storeKit = { world: world, reopen: reopen, env: env, settle: settle, stored: stored, oldEntry: oldEntry, CH: CH,
+    TASKS: TASKS, GATE: GATE, chartS: chartS, noteText: noteText, setX: setX, lost: lost, noWhole: noWhole, key: key };
   SPEC.suites.push({ name: 'the store spec', fn: storeSpec });
+  SPEC.suites.push({ name: 'the store walkthroughs over folded charts', fn: function () {
+    FOLDING = true;
+    try { storeSpec(); } finally { FOLDING = false; }
+    // The mode really folds: the default chart's note reads with a composite key.
+    FOLD = true;
+    var t = noteText(chartS()), fr = B.read(t, LIST);
+    FOLD = false;
+    ok('folded walkthroughs: the default note folds back to the chart', fr.key !== fr.bodyKey && S.same(fr.chart, chartS()) && !S.same(fr.json, chartS()));
+    acaseReal('folded walkthroughs: the opens really folded', function () {
+      ok('folded walkthroughs: most opens read a composite key (' + FOLDED_OPENS + ')', FOLDED_OPENS >= 40, String(FOLDED_OPENS));
+    });
+  } });
+  SPEC.suites.push({ name: 'the G1 list store spec', fn: listStoreSpec });
   SPEC.suites.push({ name: 'the M7 store spec', fn: memberSpec });
   if (typeof module !== 'undefined' && module.exports) module.exports = GT;
 })(typeof window !== 'undefined' ? window : globalThis);

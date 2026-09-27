@@ -300,10 +300,14 @@
 
   // The checklist section a NEW chart stores for a UI language (§15.1).
   // A chart without the setting reads as "Checklist" whatever the language.
-  MD.defaultSection = function (lang) {
-    var I = GT.i18n;
-    return I && I.normTag(lang) === 'zh-CN' ? I.ZH.Checklist : 'Checklist';
-  };
+  // Note content, not UI text: fixed here so a change to the UI
+  // translation never changes what new charts write (review round 1).
+  MD.NOTE_DEFAULTS = { en: { section: 'Checklist', list: 'Tasks' }, zh: { section: '清单', list: '任务' } };
+  function noteLang(lang) { var I = GT.i18n; return I && I.normTag(lang) === 'zh-CN' ? 'zh' : 'en'; }
+  MD.defaultSection = function (lang) { return MD.NOTE_DEFAULTS[noteLang(lang)].section; };
+  // The task list heading a NEW chart stores, and the default a legacy
+  // chart migrates to (task-groups plan §5.2.1, §5.6): "Tasks" or "任务".
+  MD.defaultListHeading = function (lang) { return MD.NOTE_DEFAULTS[noteLang(lang)].list; };
 
   function oneLine(s) { return String(s == null ? '' : s).replace(/[\r\n]+/g, ' ').trim(); }
 

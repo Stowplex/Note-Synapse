@@ -67,8 +67,9 @@
     name: 'PRESS_NAME', group: 'PRESS_GROUP', header: 'PRESS_HDR', rows: 'PRESS_ROWS'
   };
   G.AXES = { bg: 3, bar: 3, barSel: 3, handle: 3, name: 2, group: 2, header: 1, rows: 2 };
-  // Presses that arm the long-press timer (touch and pen only; §13.2).
-  var LONG = { PRESS_BAR: true, PRESS_NAME: true };
+  // Presses that arm the long-press timer (touch and pen only; §13.2). A
+  // group header's long press opens its group sheet (task-groups plan §8.3).
+  var LONG = { PRESS_BAR: true, PRESS_NAME: true, PRESS_GROUP: true };
   // The drag states (M6): a preview on every move, a commit on the up.
   var DRAGS = { MOVE: true, RESIZE_S: true, RESIZE_E: true, REORDER: true };
   G.DRAGS = DRAGS;
@@ -91,6 +92,9 @@
    *   longPress(kind, id)   a press on a bar or name held for LONG_MS; its
    *                         release is not a tap. Returning true lifts it:
    *                         a bar becomes ARMED, a name starts a REORDER.
+   *                         On a group header ('group', id) true means the
+   *                         owner opened its group sheet (GROUP_SHEET: no
+   *                         pan, no tap); false leaves an ordinary press.
    *   dragStart(state, id, x0, y0) -> true to take a drag (MOVE, RESIZE_S,
    *                         RESIZE_E, REORDER) of task `id` pressed at client
    *                         x0, y0; false refuses it and the pointer pans.
@@ -382,6 +386,15 @@
     function onLong() {
       longTimer = null;
       var st = g.state;
+      // PRESS_GROUP (task-groups plan §8.3): LONG -> GROUP_SHEET when the
+      // owner takes it; the gesture then ignores moves and its up is not a
+      // tap. Refused, the press stays a press: move > slop pans, up folds.
+      if (st === 'PRESS_GROUP') {
+        if (!api.longPress || api.longPress('group', g.id) !== true) return;
+        g.longFired = true;
+        g.state = 'GROUP_SHEET';
+        return;
+      }
       if (st !== 'PRESS_BAR' && st !== 'PRESS_NAME') return;
       g.longFired = true;
       var lifted = api.longPress ? api.longPress(g.kind, g.id) === true : false;

@@ -92,6 +92,12 @@
    */
   R.SEG_FIT = 117;
   R.GRP_TALL = 32;
+  // G3 review round 1: a group header narrower than this hides its hint
+  // (gantt.html container query); the header's strip in the body shows it.
+  // Round 2: 230, so the header never shows it cut ("Drag tasks h…" at 195).
+  R.HINT_MIN = 230;
+  // CJK ideographs, kana, hangul and full-width forms (a title that may wrap anywhere).
+  R.hasCjk = function (s) { return /[⺀-鿿가-힯豈-﫿＀-￯]/.test(String(s || '')); };
   /*
    * The name column a divider drag asks for (§14.2): between 56 px and half
    * the width; below 88 px it snaps to the 56 px mini column (colour dot and
@@ -162,7 +168,8 @@
     // drag preview. pv is null or
     //   {kind: 'lift', id}                          a long-pressed bar
     //   {kind: 'move'|'resize', id, start, end, edge?, bubble?, bx?, by?}
-    //   {kind: 'reorder', id, dy, from, lo, hi, dir, hd, bubble?, bx?, by?}
+    //   {kind: 'reorder', id, dy, from, lo, hi, dir, hd, bubble?, bx?, by?,
+    //    group?, into?, slot?, hidden?, changed?}  (reorderTarget's fields)
     // bx, by: the pointer in body px (the date bubble sits above it).
     var sel = null, selHandles = false, pv = null;
     var pvTask = { id: null, start: null, end: null, milestone: false };
@@ -262,8 +269,20 @@
       chev.textContent = '▾';
       chev.setAttribute('aria-hidden', 'true');
       node('span', 'g-dot', el);
-      var t = node('span', 'g-gt', el), n = node('span', 'g-gn', el);
-      return { el: el, t: t, n: n, m: {}, id: null };
+      // g-gh: the secondary text, "{n} unscheduled" or "Drag tasks here" (task-groups plan §8.7, §8.8).
+      var t = node('span', 'g-gt', el), hint = node('span', 'g-gh', el), n = node('span', 'g-gn', el);
+      return { el: el, t: t, hint: hint, n: n, m: {}, id: null };
+    }
+    // The No-group slot row while a REORDER drag is live (task-groups plan
+    // §8.1, §8.2): one element in the name column, a dashed outline with
+    // "No group". A drag affordance only, so it is hidden from assistive
+    // technology (the task sheet's Group row is the accessible route).
+    var slotEl = null;
+    function makeSlot() {
+      slotEl = { el: node('div', 'g-slot', els.namesInner), m: {}, shown: false };
+      slotEl.el.setAttribute('aria-hidden', 'true');
+      slotEl.t = node('span', 'g-st', slotEl.el);
+      return slotEl;
     }
     function take(pool, make, k) {
       if (k >= R.POOL_CAP) return null;
@@ -350,6 +369,7 @@
         // Nothing to show (switching charts, a damaged block): drop the old rows now.
         data.built = null; data.info = {}; win0 = null;
         hideFrom(barPool, 0); hideFrom(namePool, 0); hideFrom(groupPool, 0);
+        if (slotEl && slotEl.shown) { slotEl.shown = false; wStyle(slotEl.el, slotEl.m, 'disp', 'display', 'none'); }
         if (els.empty && !els.empty.hidden) { els.empty.hidden = true; counters.domWrites++; }
         invalidate(ALL);
         return;
@@ -383,7 +403,41 @@
     }
     function rebuild() {
       var m = size.m;
-      data.built = LY().buildRows(data.chart, data.collapsed, data.density, { rowH: m ? m.rowH : undefined });
+      data.built = LY().buildRows(data.chart, data.collapsed, data.density, { rowH: m ? m.rowH : undefined, dragSlot: data.dragSlot });
+    }
+    /*
+     * setDragSlot(on) -> {h, dy} or null (task-groups plan §8.1). On: the
+     * rows gain the No-group slot row when the chart has one (buildRows
+     * dragSlot) and the camera's sy grows by dy = layout.slotShift(sy, h),
+     * so no row moves on screen unless the list is at its top. Off: the row
+     * goes and slotShift(sy, h) at the current sy comes off (review round
+     * 1: an autoscroll since the lift may have moved sy either way).
+     * Returns what was applied or taken off (null when this chart has no
+     * slot row); at lift the owner re-reads the dragged row's centre
+     * (every row moved down by h) and adds dy to its drag's sy0.
+     */
+    var slotCam = null;
+    function setDragSlot(on) {
+      on = !!on;
+      if (on === !!data.dragSlot) return slotCam;
+      data.dragSlot = on;
+      var was = slotCam, back = null;
+      slotCam = null;
+      if (!on && was) {
+        back = { h: was.h, dy: LY().slotShift(cam.sy, was.h) };
+        cam.sy -= back.dy;
+      }
+      if (data.chart) rebuild();
+      var b = data.built;
+      if (on && b && b.slot >= 0) {
+        var h = b.rows[b.slot].h;
+        slotCam = { h: h, dy: LY().slotShift(cam.sy, h) };
+        cam.sy += slotCam.dy;
+      }
+      states();
+      clampNow();
+      invalidate(F.GEOM | F.WIN | F.CAM);
+      return on ? slotCam : back;
     }
     function setCollapsed(list) {
       data.collapsed = list;
@@ -673,13 +727,15 @@
       // first rendered row, so Tab always reaches the name column.
       var ri = roveIndex();
       var tabAt = ri >= win0.r0 && ri <= win0.r1 ? ri : win0.r0;
+      var slotShown = false;
       function one(i) {
         var row = rows[i], off = rowOff(i);
         if (row.kind === 'group') {
           var gp = take(groupPool, makeGroup, kg);
-          if (gp) { kg++; paintGroup(gp, row, off, i === tabAt); }
+          if (gp) { kg++; paintGroup(gp, row, off, i === tabAt, flashing); }
           return;
         }
+        if (row.kind === 'slot') { paintSlot(row, off); slotShown = true; return; }
         var np = take(namePool, makeName, kn);
         if (np) { kn++; paintName(np, row, flashing, off, i === tabAt); }
         var task = taskFor(row.task);
@@ -696,6 +752,7 @@
       for (var i = win0.r0; i <= win0.r1; i++) one(i);
       // A row dragged (or autoscrolled) out of the window stays painted.
       if (reo && (reo.from < win0.r0 || reo.from > win0.r1) && reo.from < n) one(reo.from);
+      if (!slotShown && slotEl && slotEl.shown) { slotEl.shown = false; wStyle(slotEl.el, slotEl.m, 'disp', 'display', 'none'); }
       hideFrom(barPool, kb);
       hideFrom(namePool, kn);
       hideFrom(groupPool, kg);
@@ -837,22 +894,52 @@
       wText(p.t, m, 't', inf.title);
       wText(p.meta, m, 'meta', inf.meta);
     }
-    function paintGroup(p, row, off, tab) {
+    // The reorder preview's target is this header's band, or the slot, and
+    // the drop would change the chart (task-groups plan §8.2).
+    // Review round 1: a plain drop under a collapsed header (group, hidden)
+    // enters that group too, so its header shows it the same way.
+    function dropInto(row) {
+      if (!pv || pv.kind !== 'reorder' || pv.changed !== true) return false;
+      return pv.into === row.id || (!!row.collapsed && pv.hidden === true && pv.group === row.id);
+    }
+    function dropSlot() { return !!pv && pv.kind === 'reorder' && pv.changed === true && pv.slot === true; }
+    // A header's secondary text: "{n} unscheduled", or "Drag tasks here" on an editable chart (§8.7, §8.8).
+    function groupHint(row) {
+      var un = row.unscheduled ? 0 : row.un || 0;
+      return row.unscheduled ? '' : (un > 0 ? I.fmt('{n} unscheduled', { n: un }) : (row.n === 0 && data.editable ? I.text('Drag tasks here') : ''));
+    }
+    function paintGroup(p, row, off, tab, flashing) {
       var m = p.m, g = row.group;
       var gt = row.unscheduled ? I.text('Unscheduled') : (g.title || I.text('Untitled'));
+      var un = row.unscheduled ? 0 : row.un || 0, into = !row.unscheduled && dropInto(row);
+      // Every member counts (§8.7); undated ones are named in the label and the secondary text.
+      var label = un > 0 ? I.fmt('{title}, {n} task(s), {m} unscheduled', { title: gt, n: row.n, m: un }) : I.fmt('{title}, {n} task(s)', { title: gt, n: row.n });
+      var hint = groupHint(row);
       wAttr(p.el, m, 'tab', 'tabindex', tab ? '0' : '-1');
-      wAttr(p.el, m, 'aria', 'aria-label', I.fmt('{title}, {n} task(s)', { title: gt, n: row.n }));
+      wAttr(p.el, m, 'aria', 'aria-label', label);
       if (p.id === null) wStyle(p.el, m, 'disp', 'display', '');
       p.id = row.id;
       var hue = g ? LY().colorFor(null, null, row.gi, { colorBy: 'group' }, g) : 'slate';
-      wClass(p.el, m, 'g-grp c-' + hue + (row.h >= R.GRP_TALL ? ' tall' : '') + (row.collapsed ? ' collapsed' : '') + (row.unscheduled ? ' unscheduled' : '') +
+      // Only a CJK title may take a second line: a Latin word is never split (§14.1).
+      wClass(p.el, m, 'g-grp c-' + hue + (row.h >= R.GRP_TALL && R.hasCjk(gt) ? ' tall' : '') + (row.collapsed ? ' collapsed' : '') + (row.unscheduled ? ' unscheduled' : '') +
+        (row.empty && !row.unscheduled ? ' empty' : '') + (into ? ' drop' : '') + (flashing && flashIds[row.id] === 1 ? ' flash' : '') +
         (pv && pv.kind === 'reorder' ? ' g-shift' : ''));
       wAttr(p.el, m, 'id', 'data-group', row.id);
       wAttr(p.el, m, 'exp', 'aria-expanded', row.collapsed ? 'false' : 'true');
       wStyle(p.el, m, 'tf', 'transform', 'translate3d(0,' + (row.y + (off || 0)) + 'px,0)');
       wStyle(p.el, m, 'h', 'height', row.h + 'px');
       wText(p.t, m, 't', gt);
-      wText(p.n, m, 'n', String(row.n));
+      wText(p.hint, m, 'hint', hint);
+      // A band target previews the count with the dragged task in it (§8.2).
+      wText(p.n, m, 'n', String(into ? row.n + 1 : row.n));
+    }
+    function paintSlot(row, off) {
+      var s = slotEl || makeSlot(), m = s.m;
+      if (!s.shown) { s.shown = true; wStyle(s.el, m, 'disp', 'display', ''); }
+      wClass(s.el, m, 'g-slot' + (dropSlot() ? ' drop' : '') + (pv && pv.kind === 'reorder' ? ' g-shift' : ''));
+      wStyle(s.el, m, 'tf', 'transform', 'translate3d(0,' + (row.y + (off || 0)) + 'px,0)');
+      wStyle(s.el, m, 'h', 'height', row.h + 'px');
+      wText(s.t, m, 't', I.text('No group'));
     }
 
     /* ---- selection overlay: handles, ghost, snap guides, date bubble (M6) ---- */
@@ -980,9 +1067,11 @@
       ctx.fillRect(0, 0, W, H);
       // Row stripes and group bands.
       ctx.fillStyle = tok('--g-stripe');
+      // The drag-only slot row does not count, so no stripe flips at lift or drop (G3 review round 1).
+      var sl = data.built.slot;
       for (var i = vis.first; i <= vis.last; i++) {
         var r = rows[i];
-        if (r.kind === 'group' || i % 2 === 1) {
+        if (r.kind === 'group' || (r.kind !== 'slot' && (i - (sl >= 0 && i > sl ? 1 : 0)) % 2 === 1)) {
           var y = r.y - cam.sy;
           ctx.fillRect(0, y, W, r.h);
           if (r.kind === 'group') ctx.fillRect(0, y, W, r.h);   // group rows: stripe drawn twice, a slightly stronger band
@@ -1018,7 +1107,31 @@
         ctx.fillStyle = tok('--today');
         ctx.fillRect(Math.round(tx) - 1, 0, 2, H);
       }
+      // G3 review round 1: in a name column too narrow for a header's hint,
+      // the hint is drawn in that header's strip at the body's left edge.
+      bodyHints = [];
+      if (size.m && size.m.nameW < R.HINT_MIN) {
+        for (var k = vis.first; k <= vis.last; k++) {
+          var gr = rows[k], ht = gr.kind === 'group' ? groupHint(gr) : '';
+          if (!ht) continue;
+          if (!bodyHints.length) { ctx.save(); ctx.font = '500 11px ' + FONT; ctx.textBaseline = 'middle'; }
+          var hy = gr.y - cam.sy + gr.h / 2;
+          // Review round 2: a backing in the band's own colour, so the today
+          // line and gridlines drawn above never cross the text.
+          var tw = ctx.measureText(ht).width, bh = Math.min(gr.h - 6, 20), back = { x: 4, y: hy - bh / 2, w: tw + 8, h: bh };
+          ctx.fillStyle = tok('--g-bg');
+          ctx.fillRect(back.x, back.y, back.w, back.h);
+          ctx.fillStyle = tok('--g-stripe');
+          ctx.fillRect(back.x, back.y, back.w, back.h);
+          ctx.fillRect(back.x, back.y, back.w, back.h);
+          ctx.fillStyle = tok('--muted');
+          ctx.fillText(ht, 8, hy);
+          bodyHints.push({ id: gr.id, text: ht, x: 8, y: hy, back: back });
+        }
+        if (bodyHints.length) ctx.restore();
+      }
     }
+    var bodyHints = [];
     function drawHeader() {
       counters.canvasDraws++;
       var ctx = hctx, W = size.bodyW, t0 = size.m.tiers[0], t1 = size.m.tiers[1], H = t0 + t1;
@@ -1190,6 +1303,7 @@
       if (y < m.hdrH) return x >= m.nameW ? { kind: 'header', day: Math.floor(SC().dayAt(cam, x - m.nameW)) } : { kind: 'corner' };
       var cy = y - m.hdrH + cam.sy;
       var ri = LY().rowAt(data.built.rows, cy), row = ri >= 0 ? data.built.rows[ri] : null;
+      if (row && row.kind === 'slot') { row = null; ri = -1; }   // the drag-only slot row holds nothing to press
       var res = { kind: 'grid', rowIndex: ri, day: null, taskId: null, groupId: null };
       if (row && row.kind === 'group') res.groupId = row.id;
       if (row && row.kind === 'task') res.taskId = row.id;
@@ -1326,6 +1440,8 @@
       hdrH: function () { return size.m ? size.m.hdrH : 0; },
       setSize: setSize,
       setCollapsed: setCollapsed,
+      setDragSlot: setDragSlot,
+      dragSlot: function () { return slotCam; },
       setDisplay: setDisplay,
       display: function () { return { density: data.density, showWeekends: data.showWeekends, weekNumbers: data.weekNumbers, nameW: data.nameW }; },
       lite: function () { return !!liteOn; },
@@ -1361,6 +1477,8 @@
       nameW: function () { return size.m ? size.m.nameW : 0; },
       // Test hooks: the today-timer body, header labels of the next frames, the camera object.
       tick: tick,
+      // The header hints the last grid draw put in the body (G3 review round 1).
+      bodyHints: function () { return bodyHints.slice(); },
       traceLabels: function (on) { var t = trace; trace = on ? [] : null; return t; },
       camRef: function () { return cam; },
       counters: function () { var c = {}; Object.keys(counters).forEach(function (k) { c[k] = counters[k]; }); return c; },
