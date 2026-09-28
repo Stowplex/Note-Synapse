@@ -176,7 +176,7 @@ If another `## Tasks` heading of your own sits higher up in the note, it becomes
 - If you approve without ticking the box, Note Synapse asks on every save, so the chart switches to "Unsaved changes. Tap to save": nothing is written until you tap. After a refusal it shows "Not saved. Tap to save".
 - Unsaved changes are kept on the device (the app's own storage, which needs no approval) until they are saved. If the app closes before that, the next open offers them: "Unsaved changes from … [Restore] [Discard] [Copy chart JSON]".
 - Ticking a sub-note writes to the database, which Note Synapse approves separately; the app explains this before the first one.
-- Dates can also be written into the task notes themselves (Chart settings, "Write dates to task notes"), so they show in the Calendar. They ride in the same approval as the chart.
+- Dates are written into the task notes themselves, so they show in the Calendar (Chart settings, "Write dates to task notes", on by default). They ride in the same approval as the chart. Plain notes (not tasks) keep their dates in the chart only. A date changed in a task note moves its bar the next time the chart reads it, with an "Updated from the note" toast and Undo. A chart whose task notes already hold other dates (from before this setting was on) shows a banner once: Update notes, Use note dates or Keep both. The task sheet shows a note's own dates under the date fields when they differ.
 
 ## Known limits
 

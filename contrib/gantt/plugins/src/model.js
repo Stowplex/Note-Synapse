@@ -35,7 +35,9 @@
     ['progressSource', 'subnotes'], ['progressSection', 'Checklist'], ['childTasks', true],
     ['progressStyle', 'fill'], ['colorBy', 'status'], ['scale', 'week'], ['weekStart', null],
     ['workdays', [1, 2, 3, 4, 5]], ['holidays', []], ['mirror', true], ['embed', false],
-    ['syncDates', false],
+    // Task-groups plan §8.12: on by default (an omitted key means on), so
+    // chart moves reach the task notes; off is stored as false.
+    ['syncDates', true],
     // Task-groups plan §7.1: appended after syncDates so blocks that kept
     // them in _x serialise byte-identically. listHeading null = legacy chart.
     ['listHeading', null], ['listLevel', 2], ['seedSkip', null]
@@ -491,6 +493,29 @@
     var t = M.task(chart, id);
     if (!t) return noop(chart);
     return setFields(chart, id, dates(start, end, t.milestone));
+  };
+
+  /*
+   * Task-groups plan §8.12: the dates a task takes from its note's
+   * scheduledAt (s) and completeBy (d), day numbers or null. A null note
+   * date keeps the chart's; a milestone follows s only; an unscheduled task
+   * is scheduled like Add (s or d, then 5 days without d). An end before
+   * the start moves to the start. -> {start, end} or null when the chart
+   * already shows them or the note has no dates.
+   */
+  M.noteDates = function (t, s, d) {
+    if (!t || (s === null && d === null)) return null;
+    if (t.milestone) return s !== null && s !== t.start ? { start: s, end: null } : null;
+    var a, b;
+    if (t.start === null) {
+      a = s !== null ? s : d;
+      b = d !== null ? d : a + 4;
+    } else {
+      a = s !== null ? s : t.start;
+      b = d !== null ? d : (t.end === null ? t.start : t.end);
+    }
+    if (b < a) b = a;
+    return a === t.start && b === (t.end === null ? t.start : t.end) ? null : { start: a, end: b };
   };
 
   // Move a task to index `toIndex` of the task list; optionally regroup it

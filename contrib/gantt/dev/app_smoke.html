@@ -131,7 +131,7 @@ var FRAMES = {
   // G0 (task-groups plan §8.9): naming tasks and milestones.
   nm: 'fixture=region-basic.md&launch=note&frame=timer&set=syncDates:true&app=gt-smoke-nm',
   nmzh: 'fixture=region-basic.md&launch=note&locale=zh-CN&frame=timer&app=gt-smoke-nmzh',
-  nmng: 'fixture=empty.json&launch=note&frame=timer&app=gt-smoke-nmng',
+  nmng: 'fixture=empty.json&launch=note&frame=timer&set=syncDates:false&app=gt-smoke-nmng',
   nmuns: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-nmuns',
   // G1 (task-groups plan §5): migration on save, attached text across a drag, the missing heading banner.
   g1mig: 'fixture=region-basic.md&launch=note&frame=timer&app=gt-smoke-g1mig',
@@ -162,7 +162,19 @@ var FRAMES = {
   gst: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gst',
   gsm: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gsm',
   gwl: 'fixture=list-basic.md&launch=note&frame=timer&app=gt-smoke-gwl',
-  gax: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-gax'
+  gax: 'fixture=unscheduled.json&launch=note&frame=timer&app=gt-smoke-gax',
+  // Date sync (task-groups plan §8.12): the banner and its three actions,
+  // its order after Restore, zh-CN, the task sheet's note dates line and
+  // the toast for dates changed in a task note.
+  dsb: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync,t1:2026-09-29:2026-10-07,t3:2026-10-14:2026-11-06&app=gt-smoke-dsb',
+  dsu: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync,t1:2026-09-29:2026-10-07,t3:2026-10-14:2026-11-06&app=gt-smoke-dsu',
+  dsk: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync,t1:2026-09-29:2026-10-07&app=gt-smoke-dsk',
+  dso: 'fixture=region-basic.md&launch=note&frame=timer&entry=move:t3:3&ndates=sync,t1:2026-09-29:2026-10-07&app=gt-smoke-dso',
+  dsz: 'fixture=region-basic.md&launch=note&locale=zh-CN&frame=timer&ndates=sync,t1:2026-10-03:2026-10-09&app=gt-smoke-dsz',
+  dss: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync,t1:2026-10-03:2026-10-09&app=gt-smoke-dss',
+  dst: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync&app=gt-smoke-dst',
+  dsm: 'fixture=list-basic.md&launch=note&frame=timer&ndates=sync&app=gt-smoke-dsm',
+  dse: 'fixture=region-basic.md&launch=note&frame=timer&ndates=sync,t3::2026-11-10&app=gt-smoke-dse'
 };
 // Landscape phone frames; the rest are 390 x 780.
 var SIZES = { gwl: [844, 390], land: [844, 390], bigLand: [844, 390], sideLand: [844, 390], r19l: [844, 390], dfl: [844, 390] };
@@ -4121,7 +4133,7 @@ function namingEdges() {
     s.sheet.close();
     d.body.dispatchEvent(new W.PointerEvent('pointerdown', { bubbles: true }));
     A.openSheet(t.id, 'peek');
-    ok('naming: no syncDates hint on a chart without syncDates', d.querySelector('#sheet .sh-lhint').hidden && vis(d.querySelector('#sheet [data-action="link-note"]')));
+    ok('naming: no syncDates hint on a chart with syncDates off (§8.12: on by default)', d.querySelector('#sheet .sh-lhint').hidden && vis(d.querySelector('#sheet [data-action="link-note"]')));
     s.sheet.close();
     return ready('nmuns');
   }).then(function (w) {
@@ -5228,6 +5240,179 @@ function groupA11y() {
 function run(name, fn) {
   return fn().catch(function (e) { ok(name + ' ran to the end', false, String((e && e.stack) || e)); });
 }
+/*
+ * Date sync (task-groups plan §8.12): charts whose task notes already hold
+ * other dates show one banner ([Update notes] [Use note dates] [Keep both])
+ * after Restore and before the list banners; the task sheet names the
+ * note's dates with "Use note dates"; a date changed in a task note moves
+ * the bar with the "Updated from the note" toast and its Undo.
+ */
+function dateSync() {
+  var W, s, d, A, mock, ids;
+  function bannerKind() { var b = d.getElementById('banner'); return b.hidden ? '' : b.getAttribute('data-kind'); }
+  function bannerText() { return d.querySelector('#banner .b-text').textContent; }
+  function btn(a) { return d.querySelector('#banner [data-action="' + a + '"]'); }
+  function use(k) { W = k; s = S(W); d = W.document; A = W.GT.app; mock = W.GTDev.mock; ids = W.GTDev.EXAMPLE_IDS; }
+  return ready('dsb').then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    eq('dateSync banner: shown for notes whose dates differ', bannerKind(), 'dates-gap');
+    eq('dateSync banner: the text', bannerText(), '2 task notes have different dates than the chart.');
+    eq('dateSync banner: three actions', Array.prototype.map.call(d.querySelectorAll('#banner button'), function (b) { return b.textContent; }).join('|'), 'Update notes|Use note dates|Keep both');
+    eq('dateSync banner: nothing written at open, the chart kept its dates', ups(W) + '|' + ymd(W, task(W, 't1').start), '0|2026-10-01');
+    btn('dates-push').click();
+    return saved(W);
+  }).then(function () {
+    var list = mock.updates[mock.updates.length - 1];
+    eq('dateSync update: one updateNotes array, the chart then both notes', JSON.stringify(list.map(function (e) { return e.id; })), JSON.stringify(['chart-note', ids[0], ids[2]]));
+    eq('dateSync update: the notes have the chart dates', mock.note(ids[0]).scheduledAt + ' ' + mock.note(ids[0]).completeBy + ' ' + mock.note(ids[2]).scheduledAt, '2026-10-01 2026-10-09 2026-10-12');
+    A.syncUi();
+    eq('dateSync update: the banner is gone', bannerKind(), '');
+    return ready('dsu');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    btn('dates-use').click();
+    eq('dateSync use: the chart has the note dates', ymd(W, task(W, 't1').start) + ' ' + ymd(W, task(W, 't1').end) + ' ' + ymd(W, task(W, 't3').start), '2026-09-29 2026-10-07 2026-10-14');
+    eq('dateSync use: one undo entry', A.undoLabel('undo'), 'Undo: Use note dates “Q4 Launch”');
+    eq('dateSync use: the banner is gone', bannerKind(), '');
+    return saved(W);
+  }).then(function () {
+    ok('dateSync use: the save writes no date entry', mock.updates[mock.updates.length - 1].length === 1);
+    return A.undo();
+  }).then(function () {
+    eq('dateSync use: Undo puts the chart dates back', ymd(W, task(W, 't1').start), '2026-10-01');
+    return saved(W);
+  }).then(function () {
+    eq('dateSync use: ... and its save writes them to the note', mock.note(ids[0]).scheduledAt, '2026-10-01');
+    return ready('dsk');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    eq('dateSync keep: the singular text', bannerText(), '1 task note has different dates than the chart.');
+    btn('dates-keep').click();
+    eq('dateSync keep: gone, nothing changed', bannerKind() + '|' + ups(W) + '|' + ymd(W, task(W, 't1').start), '|0|2026-10-01');
+    ok('dateSync keep: kept per chart in view state, syncDates still on', s.listView.datesKept === true && s.session.live.settings.syncDates === true);
+    return waitFor(function () { var c = s.store.cache.get('chart-note'); return c && c.view && c.view.datesKept; }, 5000, 'the view state');
+  }).then(function () {
+    ok('dateSync keep: the view state is stored', s.store.cache.get('chart-note').view.datesKept === true);
+    // A later gap on this chart (agreed dates lost, e.g. a cleared cache)
+    // stays quiet: Keep both is per chart.
+    var ss = s.store.session;
+    delete ss.dateBase[ids[0]];
+    ss.dateGap = ['t1'];
+    ok('dateSync keep: precondition, the store reports a gap again', !!s.store.dateGap());
+    A.syncUi();
+    eq('dateSync keep: ... and the banner stays hidden (datesKept)', bannerKind(), '');
+    return ready('dso');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    eq('dateSync order: Restore comes first', bannerKind(), 'restore');
+    btn('discard').click();
+    return wait(60);
+  }).then(function () {
+    A.syncUi();
+    eq('dateSync order: then the dates banner', bannerKind(), 'dates-gap');
+    return ready('dsz');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    eq('dateSync zh: the banner', bannerText(), '有 1 条任务笔记的日期与图表不同。');
+    eq('dateSync zh: the actions', Array.prototype.map.call(d.querySelectorAll('#banner button'), function (b) { return b.textContent; }).join('|'), '更新笔记|使用笔记日期|都保留');
+    A.select('t1');
+    A.openSheet('t1', 'full');
+    eq('dateSync zh: the sheet line', d.querySelector('#sheet .sh-nd span').textContent, '笔记：10月3日 → 10月9日');
+    s.sheet.close();
+    return ready('dss');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.select('t1');
+    A.openSheet('t1', 'full');
+    var nd = d.querySelector('#sheet .sh-nd');
+    ok('dateSync sheet: the note dates line shows', vis(nd));
+    eq('dateSync sheet: its text', nd.querySelector('span').textContent, 'Note: Oct 3 → Oct 9');
+    eq('dateSync sheet: the link', nd.querySelector('[data-action="note-dates"]').textContent, 'Use note dates');
+    A.select('t2');
+    A.openSheet('t2', 'full');
+    ok('dateSync sheet: no line when the dates agree', !vis(d.querySelector('#sheet .sh-nd')) && !vis(d.querySelector('#sheet .sh-nthint')));
+    A.select('t1');
+    A.openSheet('t1', 'full');
+    d.querySelector('#sheet [data-action="note-dates"]').click();
+    eq('dateSync sheet: Use note dates moves the bar', ymd(W, task(W, 't1').start) + ' ' + ymd(W, task(W, 't1').end), '2026-10-03 2026-10-09');
+    ok('dateSync sheet: ... and the line goes', !vis(d.querySelector('#sheet .sh-nd')));
+    eq('dateSync sheet: undoable', A.undoLabel('undo'), 'Undo: Use note dates “Customer interviews”');
+    s.sheet.close();
+    mock.note(ids[1]).type = 'note';
+    mock.note(ids[1]).updatedAt = mock.db.tick();
+    return s.store.refresh('resume');
+  }).then(function () {
+    A.select('t2');
+    A.openSheet('t2', 'full');
+    var h = d.querySelector('#sheet .sh-nthint');
+    ok('dateSync sheet: a plain note says its dates stay in the chart', vis(h) && h.textContent === 'This note is not a task, so its dates stay in the chart.');
+    s.sheet.close();
+    return ready('dst');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.syncUi();
+    eq('dateSync toast: no banner when the notes agree', bannerKind(), '');
+    var n = mock.note(ids[0]);
+    n.scheduledAt = '2026-10-05';
+    n.completeBy = '2026-10-13';
+    n.updatedAt = mock.db.tick();
+    return s.store.refresh('resume');
+  }).then(function () { return saved(W); }).then(function () {
+    eq('dateSync toast: the bar took the note dates', ymd(W, task(W, 't1').start) + ' ' + ymd(W, task(W, 't1').end), '2026-10-05 2026-10-13');
+    eq('dateSync toast: the text', toastText(W), 'Updated from the note: Customer interviews: Oct 5 – 13');
+    eq('dateSync toast: Undo is offered', d.querySelector('#toast button').textContent, 'Undo');
+    d.querySelector('#toast button').click();
+    eq('dateSync toast: Undo puts the chart dates back', ymd(W, task(W, 't1').start), '2026-10-01');
+    return saved(W);
+  }).then(function () {
+    eq('dateSync toast: ... and writes them to the note', mock.note(ids[0]).scheduledAt + ' ' + mock.note(ids[0]).completeBy, '2026-10-01 2026-10-09');
+    return s.store.refresh('resume');
+  }).then(function () {
+    eq('dateSync toast: no bounce afterwards', ymd(W, task(W, 't1').start), '2026-10-01');
+    return ready('dsm');
+  }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    // A line moved in the list and a task note's dates changed, one resume:
+    // the fold toast and the date toast join.
+    var t = mock.note('chart-note').content, lines = t.split('\n');
+    var line = lines.filter(function (l) { return l.indexOf('[Sync engine](') >= 0; })[0];
+    lines = lines.filter(function (l) { return l !== line; });
+    lines.splice(lines.findIndex(function (l) { return l.indexOf('[Competitive teardown](') >= 0; }) + 1, 0, line);
+    mock.setNote('chart-note', lines.join('\n'));
+    var n = mock.note(ids[0]);
+    n.scheduledAt = '2026-10-05';
+    n.completeBy = '2026-10-13';
+    n.updatedAt = mock.db.tick();
+    return s.store.refresh('resume');
+  }).then(function () { return wait(120); }).then(function () {
+    eq('dateSync merged: both applied', task(W, 't3').group + ' ' + ymd(W, task(W, 't1').start), 'g1 2026-10-05');
+    eq('dateSync merged: one toast with both', toastText(W), 'Updated from the note: Sync engine → Discovery, Customer interviews: Oct 5 – 13');
+    d.querySelector('#toast button').click();
+    eq('dateSync merged: its Undo reverts both', task(W, 't3').group + ' ' + ymd(W, task(W, 't1').start), 'g2 2026-10-01');
+    return saved(W);
+  }).then(function () { return ready('dse'); }).then(function (w) {
+    use(w);
+    A.dismissNotice();
+    A.select('t3');
+    A.openSheet('t3', 'full');
+    eq('dateSync sheet: an end-only note reads "→ Nov 10"', d.querySelector('#sheet .sh-nd span').textContent, 'Note: → Nov 10');
+    s.sheet.close();
+  });
+}
+
 [['basic', basic], ['big', big], ['home', home], ['chooser', chooser], ['embed', embed], ['resolve', resolve],
   ['states', states], ['theme', theme], ['locale', locale], ['latency', latency], ['more', more],
   ['nav', nav], ['bigTouch', bigTouch], ['rot', rot],
@@ -5240,7 +5425,7 @@ function run(name, fn) {
   ['feedback1', feedback1], ['feedback1r', feedback1r], ['export', exportFlow], ['exportFail', exportFailFlow],
   ['naming', naming], ['namingZh', namingZh], ['namingEdges', namingEdges], ['g1List', g1List], ['seed', seedFlow], ['noteSync', noteSync],
   ['groupDrag', groupDrag], ['groupScroll', groupScroll], ['groupSheet', groupSheet], ['groupAdd', groupAdd], ['groupKeys', groupKeys],
-  ['collapse', collapseFlow], ['groupSettings', groupSettings], ['a11yGroups', groupA11y]].filter(function (x) {
+  ['collapse', collapseFlow], ['groupSettings', groupSettings], ['a11yGroups', groupA11y], ['dateSync', dateSync]].filter(function (x) {
   // ?only=a,b runs just those flows (a dev aid; chrome.js then needs GT_MIN).
   var only = (/[?&]only=([^&]+)/.exec(location.search) || [])[1];
   return !only || decodeURIComponent(only).split(',').indexOf(x[0]) >= 0;

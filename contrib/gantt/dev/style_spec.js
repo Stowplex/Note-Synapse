@@ -239,7 +239,7 @@
     var cases = [
       { progressSource: 'checklist' }, { progressSection: '## Steps' }, { childTasks: false }, { progressStyle: 'segments' },
       { progressStyle: 'dots' }, { colorBy: 'group' }, { colorBy: 'task' }, { scale: 'month' }, { weekStart: 1 },
-      { workdays: [0, 1, 2, 3, 4] }, { holidays: ['2026-12-25', '2027-01-01'] }, { mirror: false }, { embed: true }, { syncDates: true },
+      { workdays: [0, 1, 2, 3, 4] }, { holidays: ['2026-12-25', '2027-01-01'] }, { mirror: false }, { embed: true }, { syncDates: false },
       { progressStyle: 'segments', colorBy: 'group', weekStart: 0 }
     ];
     var bad = [];

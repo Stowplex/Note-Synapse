@@ -34,6 +34,7 @@ require('./spec.js');
 require('./host_spec.js');
 require('./store_spec.js');
 require('./sync_spec.js');
+require('./dates_spec.js');
 require('./view_spec.js');
 require('./gesture_spec.js');
 require('./edit_spec.js');

@@ -178,7 +178,7 @@
       // plan §6.3), one at a time in this order: removals, seed, promote,
       // additions, listed more than once, edited. Nothing changes until a
       // button is tapped.
-      var lb = listBanner(s);
+      var lb = datesBanner(s) || listBanner(s);
       if (lb) { kind = lb.kind; text = lb.text; acts = lb.acts; }
     }
     if (!text) { lastBanner = ''; hideBanner(); return; }
@@ -204,6 +204,43 @@
   function quoted(t) { return '“' + t + '”'; }
   function listView() { return S.listView || (S.listView = listViewOf(null)); }
   function hashOf(texts) { return GT.block.hash(texts.join('\n')); }
+
+  /*
+   * Task-groups plan §8.12 item 4: task notes whose dates differ from the
+   * chart when nothing tells which side changed (a chart from before date
+   * sync, or a cleared cache). After Restore and the missing heading (both
+   * ui.banner kinds), before the list banners. Keep both is kept per chart
+   * in view state.
+   */
+  function datesBanner(s) {
+    var g = S.store.dateGap(), lv = listView();
+    if (!g || lv.datesKept) return null;
+    var ids = g.tasks.map(function (x) { return x.id; }), n = ids.length;
+    return { kind: 'dates-gap', text: n === 1 ? T('1 task note has different dates than the chart.') : I().fmt('{n} task notes have different dates than the chart.', { n: n }),
+      acts: [{ id: 'dates-push', label: T('Update notes'), run: function () { A.pushDates(ids); } },
+        { id: 'dates-use', label: T('Use note dates'), run: function () { A.useNoteDates(ids); } },
+        { id: 'dates-keep', label: T('Keep both'), run: A.keepDates }] };
+  }
+  A.pushDates = function (ids) {
+    var p = S.store.pushDates(ids);
+    syncUi();
+    return p.then(function (r) { syncUi(); return r; });
+  };
+  // Use note dates (banner, task sheet): one commit and one undo entry.
+  A.useNoteDates = function (ids) {
+    var r = S.store.useNoteDates(ids);
+    if (r.ok) S.stack.push({ label: labelOf('Use note dates', ids.length === 1 ? ids[0] : null), patches: r.inverse });
+    afterChange();
+    if (S.sheet.isOpen()) S.sheet.update();
+    return r;
+  };
+  A.keepDates = function () {
+    listView().datesKept = true;
+    S.store.keepDates();
+    noteCamera();
+    syncUi();
+    return true;
+  };
 
   function listBanner(s) {
     var gap = S.store.listReport(), ls = S.store.listState(), lv = listView();
@@ -270,21 +307,39 @@
     if (rep.tasksReordered && !rep.moved.length) items.push(T('Tasks reordered'));
     return items;
   }
-  A.foldText = function (rep) {
-    var items = foldChanges(rep), zh = I().language === 'zh-CN';
+  // Task-groups plan §8.12: dates taken from task notes, "Sync engine: Oct 3 – 9".
+  function dateChanges(dates) {
+    return (dates || []).map(function (x) { return I().fmt('{task}: {dates}', { task: titleOf(x.id), dates: span(x.start, x.end) }); });
+  }
+  function foldLine(items) {
+    var zh = I().language === 'zh-CN';
     var text = items.slice(0, 3).join(zh ? '，' : ', ');
     if (items.length > 3) text += ' ' + I().fmt('and {n} more', { n: items.length - 3 });
     return I().fmt('Updated from the note: {changes}', { changes: text });
-  };
+  }
+  A.foldText = function (rep, dates) { return foldLine((rep ? foldChanges(rep) : []).concat(dateChanges(dates))); };
+  /*
+   * One toast for a list fold and for note dates (§8.12). A second one
+   * arriving while the first still shows joins it: one text, and Undo
+   * reverts both (newest first).
+   */
   function showFoldToast() {
     var s = S.session;
     if (!s || S.store.session !== s || S.mode !== 'chart') return false;
-    var n = S.store.takeFold();
-    if (!n) return false;
-    var text = A.foldText(n.report);
+    var n = S.store.takeFold(), d = S.store.takeDates();
+    if (!n && !d) return false;
+    var items = (n ? foldChanges(n.report) : []).concat(dateChanges(d && d.items));
+    var inverse = (d ? d.inverse : []).concat(n ? n.inverse : []);
+    var prev = S.foldLive, t = $('toast');
+    if (prev && prev.session === s && !t.hidden && t.firstChild && t.firstChild.textContent === prev.text) {
+      items = prev.items.concat(items);
+      inverse = inverse.concat(prev.inverse);
+    }
+    var text = foldLine(items);
+    S.foldLive = { session: s, items: items, inverse: inverse, text: text };
     S.foldShown = text;
     S.foldUndo = editable();
-    A.toast(text, editable() ? { label: T('Undo'), run: function () { A.undoNoteChanges(n.inverse); } } : null);
+    A.toast(text, editable() ? { label: T('Undo'), run: function () { S.foldLive = null; A.undoNoteChanges(inverse); } } : null);
     return true;
   }
   A.showFoldToast = showFoldToast;
@@ -628,7 +683,8 @@
     return {
       dismissed: Array.isArray(v.dismissed) ? v.dismissed.filter(function (x) { return typeof x === 'string'; }) : [],
       seedHidden: typeof v.seedHidden === 'string' ? v.seedHidden : null,
-      promoteHidden: typeof v.promoteHidden === 'string' ? v.promoteHidden : null
+      promoteHidden: typeof v.promoteHidden === 'string' ? v.promoteHidden : null,
+      datesKept: v.datesKept === true
     };
   }
 
@@ -793,7 +849,7 @@
     if (!s || S.session !== s) return;
     var c = S.view.camera(), lv = S.listView || listViewOf(null);
     S.store.cache.setView(s.noteId, { ppd: c.ppd, scrollDay: S.view.leftDay(), sy: c.sy, collapsed: S.collapsed.slice(),
-      dismissed: lv.dismissed.slice(), seedHidden: lv.seedHidden, promoteHidden: lv.promoteHidden });
+      dismissed: lv.dismissed.slice(), seedHidden: lv.seedHidden, promoteHidden: lv.promoteHidden, datesKept: lv.datesKept || undefined });
   }
   var segMemo = '', segPpd = null, SEG = ['day', 'week', 'month'];
   function syncZoomSeg() {
@@ -997,12 +1053,23 @@
       id: id, title: inf.title || t.title || T('Untitled'), hue: inf.hue || 'slate', start: t.start, end: t.end,
       milestone: t.milestone, color: t.color, note: !!t.note, readOnly: !editable(),
       name: name, missing: !!(t.note && f && f.missing), syncDates: !!(c && c.settings.syncDates), renaming: renaming === id,
+      // §8.12: the note's own dates when they differ from the chart, and
+      // whether a noted task keeps its dates in the chart (not a task note).
+      noteDates: noteDatesText(t, S.store.noteDatesOf(id)), notTask: !!(t.note && f && !f.missing && f.type !== 'task' && c && c.settings.syncDates),
       progress: { ratio: typeof inf.ratio === 'number' ? inf.ratio : 0, text: progressText(inf.sum) },
       items: itemsFor(id),
       // G3 (§8.5): the Group row. A shadow group reads as No group.
       group: c && t.group && M().group(c, t.group) ? t.group : null,
       groups: c ? c.groups.map(function (g) { return { id: g.id, title: g.title || T('Untitled'), hue: groupHue(c, g) }; }) : []
     };
+  }
+  // §8.12: "Note: Oct 3 → Oct 9" (the note's own dates), or null.
+  function noteDatesText(t, nd) {
+    if (!nd) return null;
+    var a = nd.noteStart, b = t.milestone ? null : nd.noteEnd, D = I().date;
+    // An end-only note reads "→ Oct 9" (review round 1).
+    var dates = a !== null && b !== null && a !== b ? D.short(a) + ' → ' + D.short(b) : a !== null ? D.short(a) : '→ ' + D.short(b);
+    return { text: I().fmt('Note: {dates}', { dates: dates }) };
   }
   // A group's colour as the header draws it (render.paintGroup).
   function groupHue(c, g) { return GT.layout.colorFor(null, null, c.groups.indexOf(g), { colorBy: 'group' }, g); }
@@ -1115,6 +1182,7 @@
     // G0 (§8.9): the sheet waits for the rename's answer.
     if (name === 'renameNote') return A.renameTask(id, v);
     if (name === 'linkNote') { A.linkNote(id); return; }
+    if (name === 'noteDates') { A.useNoteDates([id]); return; }
     // G3 (§8.5): the Group row, and "New group…" (create and move in one commit).
     if (name === 'newGroup') { A.newGroupForm({ task: id }); return; }
     if (name === 'group') {
@@ -2994,6 +3062,8 @@
     store.on('read', syncUi);
     // G2: a fold at open or on a silent reload (the toast, once per state).
     store.on('list', function () { if (pruneCollapsed(live())) S.view.setCollapsed(S.collapsed.slice()); showFoldToast(); });
+    // §8.12: note dates applied to the chart (the same toast, with Undo).
+    store.on('dates', showFoldToast);
     H.on('localechanged', function (v) { A.setLocale(v || H.locale()); });
     H.on('spacechanged', function () { if (S.mode === 'home') A.showHome(); });
 

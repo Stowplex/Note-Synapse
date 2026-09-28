@@ -144,6 +144,10 @@
     'Tasks reordered': '任务顺序已更新',
     'Undo note changes': '撤销笔记中的更改',
     'Not now': '暂不',
+    // Task-groups plan §8.12: date sync.
+    '1 task note has different dates than the chart.': '有 1 条任务笔记的日期与图表不同。',
+    'Update notes': '更新笔记', 'Use note dates': '使用笔记日期', 'Keep both': '都保留',
+    'This note is not a task, so its dates stay in the chart.': '这条笔记不是任务，日期只保存在图表中。',
     'Use as groups': '用作分组',
     'Make groups': '设为分组',
     // G3: chart UX and group management (task-groups plan §8, §9).
@@ -249,6 +253,10 @@
     '{n} unscheduled': '{n} 个未排期',
     '{title}, {n} task(s), {m} unscheduled': '{title}，{n} 个任务，{m} 个未排期',
     'Moved to {group}': '已移到“{group}”',
+    // Task-groups plan §8.12: date sync.
+    '{n} task notes have different dates than the chart.': '有 {n} 条任务笔记的日期与图表不同。',
+    'Note: {dates}': '笔记：{dates}',
+    '{task}: {dates}': '{task}：{dates}',
     'Deleted group “{title}”. Its tasks are now ungrouped.': '已删除分组“{title}”，其中的任务已移出分组。'
   };
   function fmt(key, vars) {

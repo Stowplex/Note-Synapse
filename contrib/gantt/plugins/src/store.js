@@ -597,6 +597,8 @@
       emit('ui');
       var out = { ok: true, clearUndo: true, save: null, opsDropped: opsDropped };
       if (L.mode === 'auto') out.save = requestSave(s, {}, false);
+      // §8.12 review round 2: note dates held back by the hold apply now.
+      datesFromNotes(s);
       // A foreign entry deferred behind this (own) offer is handled now, or
       // after the save above ends (requestSave runs afterRefresh then).
       if (s.foreignPending) out.deferred = afterRefresh();
@@ -618,6 +620,8 @@
         // pending D before the queue runs (the D is never stored first).
         if (s.journalFrame !== null) { cancelFrame(s.journalFrame); s.journalFrame = null; }
         J.evaluate(s);
+        // §8.12 review round 2: note dates held back by the hold apply now.
+        datesFromNotes(s);
         emit('ui');
         var res = { ok: true };
         if (s.foreignPending) res.deferred = afterRefresh();
@@ -690,7 +694,15 @@
         la: null, foldNote: null, pendingSeedSkip: null, skipInverse: null,
         // Review round 1: attached text edits not yet saved (replayed on
         // every re-anchor) and how many of them the save in flight carries.
-        attachOps: [], writeMark: 0
+        attachOps: [], writeMark: 0,
+        // Task-groups plan §8.12: per task note the dates last agreed with
+        // the chart ({s, d}, YYYY-MM-DD or null; cached as the fact's ds),
+        // the tasks whose note dates differ with no agreed dates known (the
+        // banner), the pending date toast and its last key (the cache's ld).
+        // Review round 1: dates taken from notes into the chart but not
+        // yet saved (s.dateHeld, never cached), and each in-flight entry's
+        // fact updatedAt at the send (s.sendU).
+        dateBase: {}, dateHeld: {}, dateGap: [], dateNote: null, ld: null, sending: [], sendU: {}
       };
       s.summaries = function (chart) {
         chart = chart || s.live;
@@ -793,6 +805,8 @@
       var pkNow = S.pk(s.live.settings), pkOk = c.pk === pkNow;
       s.live.tasks.forEach(function (t) {
         if (!t.note || !isObj(c.facts[t.note])) return;
+        var ds = c.facts[t.note].ds;
+        if (Array.isArray(ds)) s.dateBase[t.note] = { s: typeof ds[0] === 'string' ? ds[0] : null, d: typeof ds[1] === 'string' ? ds[1] : null };
         var f = factFromCache(c.facts[t.note]);
         if (!pkOk || (f.prog && f.prog.src !== M().sourceOf(t, s.live.settings))) f.prog = null;
         s.facts[t.note] = f;
@@ -802,7 +816,13 @@
     function cachePut(s) {
       if (L.embed || !s.live || s.status !== 'ok') return;
       var facts = {};
-      s.live.tasks.forEach(function (t) { var f = t.note && s.facts[t.note]; if (f) facts[t.note] = factToCache(f); });
+      s.live.tasks.forEach(function (t) {
+        var f = t.note && s.facts[t.note];
+        if (!f) return;
+        facts[t.note] = factToCache(f);
+        var b = s.dateBase[t.note];
+        if (b) facts[t.note].ds = [b.s, b.d];
+      });
       var prev = st.cache.get(s.noteId);
       var region = B().hash(s.region || '');
       // Nothing changed since the last write (a resume that found nothing
@@ -810,11 +830,13 @@
       var wk = s.wroteKey || (prev && typeof prev.wk === 'string' ? prev.wk : null);
       // s.la '' after a write clears it; null means not known this session.
       var la = s.la !== null ? (s.la || null) : (prev && typeof prev.la === 'string' ? prev.la : null);
+      var ld = s.ld !== null ? s.ld : (prev && typeof prev.ld === 'string' ? prev.ld : null);
       if (prev && prev.pk === s.factPk && prev.region === region && (prev.wk || null) === wk && (prev.la || null) === la &&
-          JSON.stringify(prev.facts) === JSON.stringify(facts)) return;
+          (prev.ld || null) === ld && JSON.stringify(prev.facts) === JSON.stringify(facts)) return;
       var entry = { at: now(), region: region, pk: s.factPk, facts: facts, view: prev && prev.view ? prev.view : null };
       if (wk) entry.wk = wk;
       if (la) entry.la = la;
+      if (ld) entry.ld = ld;
       st.cache.put(s.noteId, entry);
     }
     /*
@@ -844,6 +866,184 @@
       var n = s.foldNote;
       s.foldNote = null;
       return n;
+    };
+
+    /*
+     * Task-groups plan §8.12 (date sync). A task note's dates are compared
+     * with the dates last agreed with the chart (s.dateBase, cached), never
+     * with the chart itself, so a write the host refused cannot pull the
+     * chart back. Only noted `type:'task'` notes whose dates were read
+     * this session take part.
+     */
+    function hostDay(x) { var d = D().fromHost(x); return d === null ? null : D().format(d); }
+    function noteDay(x) { return typeof x === 'string' ? D().parse(x) : null; }
+    function dateRows(s, chart) {
+      var out = [];
+      (chart || s.live).tasks.forEach(function (t) {
+        var f = t.note ? s.facts[t.note] : null;
+        if (!f || !f.dk || f.missing || f.type !== 'task') return;
+        var cur = { s: hostDay(f.sched), d: hostDay(f.due) };
+        out.push({ t: t, note: t.note, cur: cur, target: M().noteDates(t, noteDay(cur.s), noteDay(cur.d)) });
+      });
+      return out;
+    }
+    function sameBase(a, b) { return !!a && !!b && a.s === b.s && a.d === b.d; }
+    // The agreed dates of a note: held (applied, not saved yet) first.
+    function agreedOf(s, note) { return s.dateHeld[note] || s.dateBase[note]; }
+    // After a save that wrote `chart`: held dates the written chart shows
+    // become the agreed (cached) ones. -> whether any moved
+    function confirmHeld(s, chart) {
+      var moved = false;
+      Object.keys(s.dateHeld).forEach(function (note) {
+        var h = s.dateHeld[note], t = chart && chart.tasks.filter(function (x) { return x.note === note; })[0];
+        if (!t) { delete s.dateHeld[note]; return; }
+        if (M().noteDates(t, noteDay(h.s), noteDay(h.d)) !== null) return;
+        s.dateBase[note] = h;
+        delete s.dateHeld[note];
+        moved = true;
+      });
+      return moved;
+    }
+    // One commit giving each row's task its note's dates -> {chart, inverse}.
+    function applyRows(chart, rows) {
+      var inv = [];
+      rows.forEach(function (x) {
+        var r = M().setDates(chart, x.t.id, x.target.start, x.target.end);
+        chart = r.chart;
+        inv = r.inverse.concat(inv);
+      });
+      return { chart: chart, inverse: inv };
+    }
+    /*
+     * datesFromNotes(s): after the open's resolve, once the open check has
+     * run, and after a resume's chart note read. A note whose dates changed
+     * since they were last agreed gives its dates to the chart (one commit,
+     * held until a save writes it, a toast with Undo once per key `ld`);
+     * an unscheduled task whose note
+     * has dates is scheduled the same way. A note whose agreed dates are
+     * not known and differ from the chart goes to s.dateGap (the banner).
+     * Nothing runs with syncDates off, in an embed or while not editable
+     * (the agreed dates stay, so the change is applied later).
+     */
+    function datesFromNotes(s, noCache) {
+      if (L.embed || !s || !s.live || s.status !== 'ok' || st.session !== s) return;
+      if (!s.live.settings.syncDates) { s.dateGap = []; return; }
+      var apply = [], gap = [], touched = false;
+      dateRows(s).forEach(function (x) {
+        var b = agreedOf(s, x.note);
+        // This store's own date entries, queued or in flight: the chart's
+        // dates win; a note that already holds one of them agrees.
+        var mine = s.pendingDates.concat(s.sending).filter(function (d) { return d.id === x.note; });
+        if (mine.length) {
+          if (mine.some(function (d) { return d.scheduledAt === x.cur.s && d.completeBy === x.cur.d; }) && !sameBase(b, x.cur)) { s.dateBase[x.note] = x.cur; touched = true; }
+          return;
+        }
+        // Held (applied, unsaved) dates are confirmed only by a save.
+        if (!x.target) { if (!s.dateHeld[x.note] && !sameBase(b, x.cur)) { s.dateBase[x.note] = x.cur; touched = true; } return; }
+        if (!b && x.t.start !== null) gap.push(x.t.id);
+        else if (!b || !sameBase(b, x.cur)) apply.push(x);
+      });
+      s.dateGap = gap;
+      if (apply.length && canEdit(s)) {
+        var r = applyRows(s.live, apply);
+        // Review round 1: followTitles' save rule, so a read never raises
+        // an approval dialog on its own (§7.6).
+        var save = L.mode === 'auto' && L.sessionApproved ? 'debounce' : 'none';
+        if (st.commit(r.chart, { noSkip: true, save: save, auto: true })) {
+          apply.forEach(function (x) { s.dateHeld[x.note] = x.cur; });
+          emit('live', { dates: true });
+          var sig = apply.map(function (x) { return x.note + '@' + x.cur.s + '/' + x.cur.d; }).sort().join(',');
+          var ce = st.cache.get(s.noteId), h = B().hash(sig);
+          var seen = s.ld !== null ? s.ld : (ce && typeof ce.ld === 'string' ? ce.ld : null);
+          if (seen !== h) {
+            s.ld = h;
+            s.dateNote = { key: h, items: apply.map(function (x) { return { id: x.t.id, start: x.target.start, end: x.target.end }; }), inverse: r.inverse };
+            emit('dates', s.dateNote);
+          }
+        }
+      }
+      if (touched && !noCache) cachePut(s);
+    }
+    // The pending date toast, once (task-groups plan §8.12).
+    st.takeDates = function () {
+      var s = st.session;
+      if (!s || !s.dateNote) return null;
+      var n = s.dateNote;
+      s.dateNote = null;
+      return n;
+    };
+    /*
+     * The banner (§8.12 item 4): tasks whose note dates differ from the
+     * chart with no agreed dates known. -> null or {tasks:[{id, note,
+     * start, end, noteStart, noteEnd}]} (day numbers).
+     */
+    st.dateGap = function () {
+      var s = st.session;
+      if (!canEdit(s) || !s.live.settings.syncDates || !s.dateGap.length) return null;
+      var rows = dateRows(s).filter(function (x) { return x.target && !agreedOf(s, x.note) && s.dateGap.indexOf(x.t.id) >= 0; });
+      if (!rows.length) return null;
+      return { tasks: rows.map(function (x) {
+        return { id: x.t.id, note: x.note, start: x.t.start, end: x.t.end, noteStart: noteDay(x.cur.s), noteEnd: noteDay(x.cur.d) };
+      }) };
+    };
+    // The note's dates for one task when they differ from the chart (the
+    // task sheet line), whatever syncDates says. -> null or {start, end,
+    // noteStart, noteEnd}.
+    st.noteDatesOf = function (taskId) {
+      var s = st.session;
+      if (!s || !s.live) return null;
+      var x = dateRows(s).filter(function (r) { return r.t.id === taskId; })[0];
+      return x && x.target ? { start: x.target.start, end: x.target.end, noteStart: noteDay(x.cur.s), noteEnd: noteDay(x.cur.d) } : null;
+    };
+    // Update notes: the chart's dates go to those notes, one save (one
+    // approval). -> the save's promise.
+    st.pushDates = function (taskIds) {
+      var s = st.session;
+      if (!canEdit(s)) return P({ ok: false, reason: 'held' });
+      var mine = [];
+      dateRows(s).forEach(function (x) {
+        var t = x.t;
+        if ((taskIds && taskIds.indexOf(t.id) < 0) || t.start === null) return;
+        // Review round 2: an entry queued by a move already carries the
+        // chart's dates; it is kept (and kept after a denial).
+        if (s.pendingDates.some(function (d) { return d.id === t.note; })) return;
+        var e = { id: t.note, scheduledAt: D().toHost(t.start), completeBy: D().toHost(t.milestone || t.end === null ? t.start : t.end) };
+        mine.push(e);
+        s.pendingDates.push(e);
+      });
+      emit('ui');
+      // Review round 1: a save that did not write them drops them, so the
+      // banner stays and no later save sends them unasked.
+      return requestSave(s, {}, true).then(function (r) {
+        if (!r.ok) s.pendingDates = s.pendingDates.filter(function (d) { return mine.indexOf(d) < 0; });
+        emit('ui');
+        return r;
+      });
+    };
+    // Use note dates (banner or sheet): one commit, the caller keeps the
+    // undo entry. -> {ok, inverse}
+    st.useNoteDates = function (taskIds) {
+      var s = st.session;
+      if (!canEdit(s)) return { ok: false, reason: 'held' };
+      var rows = dateRows(s).filter(function (x) { return x.target && (!taskIds || taskIds.indexOf(x.t.id) >= 0); });
+      if (!rows.length) return { ok: false, reason: 'none' };
+      var r = applyRows(s.live, rows);
+      if (!st.commit(r.chart, { noSkip: true })) return { ok: false, reason: 'held' };
+      rows.forEach(function (x) { s.dateHeld[x.note] = x.cur; });
+      s.dateGap = s.dateGap.filter(function (id) { return !rows.some(function (x) { return x.t.id === id; }); });
+      cachePut(s);
+      emit('ui');
+      return { ok: true, inverse: r.inverse };
+    };
+    // Keep both: the note dates as they are now become the agreed ones.
+    st.keepDates = function () {
+      var s = st.session;
+      if (!s || !s.live) return false;
+      dateRows(s).forEach(function (x) { if (s.dateGap.indexOf(x.t.id) >= 0) s.dateBase[x.note] = x.cur; });
+      s.dateGap = [];
+      cachePut(s);
+      emit('ui');
+      return true;
     };
 
     function progOf(cl, partial) {
@@ -895,7 +1095,9 @@
           if (f.updatedAt !== row.updatedAt || f.clen !== row.clen || f.missing) changed[id] = true;
           s.facts[id] = {
             title: row.title, type: row.type, status: row.status, archived: row.isArchived, missing: false,
-            sched: row.scheduledAt, due: row.completeBy, updatedAt: row.updatedAt, clen: row.clen, prog: f.prog || null
+            sched: row.scheduledAt, due: row.completeBy, updatedAt: row.updatedAt, clen: row.clen, prog: f.prog || null,
+            // §8.12: the dates were read from the note (not from the cache).
+            dk: true
           };
         });
         (mr.missing || []).forEach(function (id) {
@@ -955,6 +1157,8 @@
         tasks.forEach(function (t) { var f = s.facts[t.note]; if (f) delete f.cached; });
         if (ok) s.factPk = pkNow;
         if (st.session === s) {
+          // A resume applies note dates after its chart note read (below).
+          if (o.dates !== false) datesFromNotes(s, true);
           cachePut(s);
           // M9 (§7.6 tuning): a resolve that found nothing new (a resume
           // over unchanged notes) re-renders nothing.
@@ -1052,6 +1256,10 @@
           if (st.session !== s) return { kind: 'superseded' };
           if (!r.ok) { s.checkFailed = true; emit('ui'); return { kind: 'check-failed' }; }
           return J.checkOnOpen(s, fr);
+        }).then(function (v) {
+          // §8.12: note dates the open's resolve could not apply while held.
+          datesFromNotes(s);
+          return v;
         });
         emit('live', { open: true });
         return { ok: true, session: s };
@@ -1061,15 +1269,27 @@
     /* ================================================== commits and saves */
 
     function queueDates(s, prev, next) {
-      if (!next.settings.syncDates) return;
+      // Review round 2: sync off (or turned off again before a save) sends
+      // no date entry, also none queued earlier.
+      if (!next.settings.syncDates) { s.pendingDates = []; return; }
+      // Review round 1: sync turned on sends every task whose chart dates
+      // differ from its note's (moves made while it was off).
+      var turnedOn = !!prev && !prev.settings.syncDates;
       next.tasks.forEach(function (t) {
         if (!t.note || t.start === null) return;
         var o = M().task(prev, t.id);
-        if (o && o.start === t.start && o.end === t.end && o.milestone === t.milestone) return;
+        if (!turnedOn && o && o.start === t.start && o.end === t.end && o.milestone === t.milestone) return;
         var f = s.facts[t.note];
-        if (!f || f.type !== 'task') return;
+        if (!f || f.type !== 'task' || (turnedOn && !f.dk)) return;
         s.pendingDates = s.pendingDates.filter(function (d) { return d.id !== t.note; });
-        s.pendingDates.push({ id: t.note, scheduledAt: D().toHost(t.start), completeBy: D().toHost(t.end !== null ? t.end : t.start) });
+        var e = { id: t.note, scheduledAt: D().toHost(t.start), completeBy: D().toHost(t.end !== null ? t.end : t.start) };
+        // §8.12: nothing to send when the note already has these dates (a
+        // chart that took them from the note, a move undone before a save).
+        // An entry in flight is what the note will hold (review round 1).
+        var fl = s.sending.filter(function (d) { return d.id === t.note; })[0];
+        var has = fl ? { s: fl.scheduledAt, d: fl.completeBy } : f.dk ? { s: hostDay(f.sched), d: hostDay(f.due) } : null;
+        if (has && has.s === e.scheduledAt && has.d === e.completeBy) return;
+        s.pendingDates.push(e);
       });
     }
 
@@ -1093,6 +1313,10 @@
         if (sk.inverse.length) { next = sk.chart; s.skipInverse = sk.inverse; }
       }
       next = M().titlesFrom(next, s.facts);
+      // §8.12 review round 2: unsaved changes made only by automatic commits
+      // (note dates, followed titles) are not flushed on hide before the
+      // session is approved (onHide).
+      s.autoOnly = o.auto ? (s.autoOnly || !hasUnsaved(s)) : false;
       s.live = next;
       queueDates(s, prev, next);
       var srcChanged = S.pk(prev.settings) !== S.pk(next.settings) || next.tasks.some(function (t) {
@@ -1157,6 +1381,7 @@
       }
       s.busy = once().then(function (r) {
         s.busy = null;
+        s.sending = [];
         s.queued = false;
         s.lastResult = r;
         emit('save', r);
@@ -1188,6 +1413,8 @@
       s.readSpill = '';
       s.missing = null;
       s.anchorOn = B().listConf(s.writing).on;
+      // §8.12 review round 1: note dates this save carried become agreed.
+      var held = confirmHeld(s, s.writing);
       s.base = s.writing;
       s.key = S.keyOf(s.writing);
       s.writing = null;
@@ -1209,7 +1436,7 @@
       s.la = '';
       later.forEach(function (op) { editApply(s, op); });
       // ...also in the cache, so a close and reopen does not bring it back.
-      if (hadLa) cachePut(s);
+      if (hadLa || held) cachePut(s);
       J.reschedule(s);
       return { ok: true };
     }
@@ -1267,6 +1494,16 @@
     }
     function settleDates(s, sent, failedDates) {
       s.pendingDates = s.pendingDates.filter(function (d) { return sent.indexOf(d) < 0; });
+      // §8.12: a written entry is what the note and the chart now agree on.
+      sent.forEach(function (d) {
+        if ((failedDates || []).some(function (x) { return x.id === d.id; })) return;
+        s.dateBase[d.id] = { s: d.scheduledAt, d: d.completeBy };
+        delete s.dateHeld[d.id];
+        // The fact follows unless a read since the send found a newer note.
+        var f = s.facts[d.id];
+        if (f && f.dk && f.updatedAt === s.sendU[d.id]) { f.sched = d.scheduledAt; f.due = d.completeBy; }
+        s.dateGap = s.dateGap.filter(function (id) { var t = s.live && M().task(s.live, id); return !t || t.note !== d.id; });
+      });
       (failedDates || []).forEach(function (d) {
         if (!s.pendingDates.some(function (x) { return x.id === d.id; })) s.pendingDates.unshift(d);
       });
@@ -1322,12 +1559,21 @@
           ? before.slice(0, before.indexOf(oldRegion)) + next + before.slice(before.indexOf(oldRegion) + oldRegion.length) : null;
         var sent = s.pendingDates.slice(), base0 = L.baselineMs, t0 = clock();
         var wp = s.region ? H.saveRegion(s.noteId, s.region, next, sent) : H.appendContent(s.noteId, '\n' + next);
+        s.sending = sent;
+        s.sendU = {};
+        sent.forEach(function (d) { var f = s.facts[d.id]; s.sendU[d.id] = f ? f.updatedAt : null; });
         return wp.then(function (w) {
+          // Review round 2: the host may apply date entries on a chart miss,
+          // so a missed attempt's entries stay "in flight" through the
+          // re-read and retry; they are cleared when the save ends.
+          if (w.ok) s.sending = [];
           var ms = typeof w.roundTripMs === 'number' ? w.roundTripMs : clock() - t0;
           if (w.ok) {
             detect(ms, base0);
             settleDates(s, sent, w.failedDates);
             var ok = agree(s, parts, after);
+            // §8.12: the dates a write agreed on are cached at once.
+            if (sent.length) cachePut(s);
             // The date entries this save sent and the host refused (the
             // chart itself was written); entries queued meanwhile are not counted.
             ok.datesFailed = (w.failedDates || []).length;
@@ -1359,6 +1605,10 @@
       var p = what === 'W' || what === 'D' ? kick() : P();
       return p.then(function () {
         if (L.mode !== 'auto' || st.session !== s) return { journal: what, flushed: false };
+        // §8.12 review round 2: only automatic changes before approval: no
+        // flush, so a hide never raises the first approval dialog on its own
+        // (the journal keeps them; the next open applies the note dates again).
+        if (s.autoOnly && !L.sessionApproved && hasUnsaved(s)) return { journal: what, flushed: false, auto: true };
         return st.flush().then(function (r) { return { journal: what, flushed: !!r, result: r }; });
       });
     };
@@ -1404,7 +1654,7 @@
         var s = st.session;
         if (!s) return null;
         if (!L.embed && Object.keys(ops).length) kick();
-        return (s.live ? st.resolve(s, { probe: s.noteId }) : P(null)).then(function (rr) {
+        return (s.live ? st.resolve(s, { probe: s.noteId, dates: false }) : P(null)).then(function (rr) {
           var pr = rr && rr.probe;
           // Skipped only when the note is as last read AND that read's block
           // is the one the session holds: a silent reload an earlier resume
@@ -1414,7 +1664,7 @@
           return H.readNote(s.noteId);
         }).then(function (r) {
           if (st.session !== s) return null;
-          if (r.skipped) return afterRead(s);
+          if (r.skipped) { datesFromNotes(s); return afterRead(s); }
           if (!r.ok) return null;
           var fr = readText(r.content);
           s.lastText = r.content;
@@ -1428,6 +1678,11 @@
           if (fr.status === 'ok') noteMissing(s, readText(r.content, s.live));
           if (fr.status === 'ok' && s.status === 'ok' && fr.key !== s.key && s.writing === null && !s.busy &&
               !hasUnsaved(s) && !s.journalHold) silentReload(s, fr);
+          // §8.12 review round 1: note dates only against the chart the note
+          // holds now: a chart note changed elsewhere (another device's move
+          // and its date entries) that could not be reloaded waits for the
+          // save that merges it.
+          if (fr.status === 'ok' && fr.key === s.key) datesFromNotes(s);
           emit('read', s);
           return afterRead(s);
         });
@@ -2445,7 +2700,7 @@
       var next = M().titlesFrom(s.live, s.facts);
       if (next === s.live) return null;
       var save = L.mode === 'auto' && L.sessionApproved ? 'debounce' : 'none';
-      return st.commit(next, { save: save, noSkip: true }) ? save : null;
+      return st.commit(next, { save: save, noSkip: true, auto: true }) ? save : null;
     };
 
     /*

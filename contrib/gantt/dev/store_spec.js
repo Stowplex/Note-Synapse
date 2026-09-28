@@ -3259,8 +3259,8 @@
         ok('G1 coerce: seedSkip ' + JSON.stringify(v) + ' is a shadow', s.seedSkip === null && Object.prototype.hasOwnProperty.call(s._x, 'seedSkip'));
       });
       eq('G1 coerce: defaults are not written, the keys follow syncDates',
-        JSON.stringify(M.settingsData(set({ listLevel: 2, listHeading: 'T', seedSkip: '0a1b2c3d', syncDates: true }))),
-        '{"syncDates":true,"listHeading":"T","seedSkip":"0a1b2c3d"}');
+        JSON.stringify(M.settingsData(set({ listLevel: 2, listHeading: 'T', seedSkip: '0a1b2c3d', syncDates: false }))),
+        '{"syncDates":false,"listHeading":"T","seedSkip":"0a1b2c3d"}');
       eq('G1 coerce: listLevel 3 is written', JSON.stringify(M.settingsData(set({ listLevel: 3 }))), '{"listLevel":3}');
       var base = chartS({ listHeading: 'Tasks' }), zh = chartS({ listHeading: '任务' });
       var m1 = M.merge3(base, base, zh);

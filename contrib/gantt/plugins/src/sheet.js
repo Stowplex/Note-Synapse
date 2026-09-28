@@ -439,6 +439,14 @@
     P.start = field('sh-start', 'Start');
     P.end = field('sh-end', 'End');
     P.dur = el('div', 'sh-dur', '', b);
+    // Task-groups plan §8.12: the note's own dates when they differ.
+    P.nd = el('div', 'sh-nd', null, b);
+    P.ndText = el('span', null, '', P.nd);
+    P.ndUse = button('sh-link', T('Use note dates'), P.nd, function () { st.ctx.act('noteDates', st.id); });
+    P.ndUse.setAttribute('data-action', 'note-dates');
+    P.nd.hidden = true;
+    P.ntHint = el('div', 'sh-detail sh-nthint', T('This note is not a task, so its dates stay in the chart.'), b);
+    P.ntHint.hidden = true;
     function dateChange(which, input) {
       var vm = st.ctx.task(st.id);
       if (!vm) return;
@@ -610,6 +618,10 @@
     P.end.i.disabled = ro || vm.start === null;
     P.dur.textContent = vm.start === null ? T('Unscheduled') : (vm.milestone ? T('Milestone') :
       st.ctx.fmt('Duration: {n} day(s)', { n: (vm.end === null ? vm.start : vm.end) - vm.start + 1 }));
+    P.nd.hidden = !vm.noteDates;
+    P.ndText.textContent = vm.noteDates ? vm.noteDates.text : '';
+    P.ndUse.hidden = ro;
+    P.ntHint.hidden = !vm.notTask;
     P.ms.checked = !!vm.milestone;
     // A task with no note must stay a milestone (model.setTask).
     P.ms.disabled = ro || (!vm.note && vm.milestone);

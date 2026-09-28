@@ -62,6 +62,13 @@
  * G2:
  *   wrote    1 seeds the cache's `wk` with the chart note's body key (the
  *            removal banner's gate); every note the fixture links to exists.
+ * Date sync (task-groups plan §8.12):
+ *   ndates   the task notes' scheduledAt / completeBy: `sync` gives every
+ *            task note its chart dates, <taskId>:<start>:<end> sets one
+ *            (an empty part is null), for example ndates=sync,t1:2026-10-03:2026-10-11
+ *   do       also: nd:<taskId>:<start>:<end> (that task note's dates change
+ *            elsewhere, then a resume reads them), usenote:<taskId> (the
+ *            open sheet's "Use note dates")
  */
 (function (global) {
   'use strict';
@@ -260,6 +267,28 @@
     else global.sessionStorage.setItem(key, JSON.stringify(blob));
   }
 
+  // ndates=... (§8.12): the task notes' dates at launch.
+  function applyNoteDates(o, seed) {
+    if (!o.ndates || !seed.chart) return;
+    var D = global.GT.dates, byId = {};
+    seed.notes.forEach(function (n) { byId[n.id] = n; });
+    String(o.ndates).split(',').forEach(function (part) {
+      var p = part.split(':');
+      seed.chart.tasks.forEach(function (t) {
+        var n = t.note && byId[t.note];
+        if (!n || (p[0] !== 'sync' && p[0] !== t.id)) return;
+        if (p[0] === 'sync') {
+          if (t.start === null) return;
+          n.scheduledAt = D.format(t.start);
+          n.completeBy = D.format(t.milestone || t.end === null ? t.start : t.end);
+        } else {
+          n.scheduledAt = p[1] || null;
+          n.completeBy = p[2] || null;
+        }
+      });
+    });
+  }
+
   // Installs the mock over the fixture and boots the app. -> the boot promise
   GTDev.boot = function () {
     var o = GTDev.opts || GTDev.params;
@@ -288,6 +317,7 @@
     var storage = o.persist === '1' ? undefined : new Map();
     if (o.entry) seedEntry(o, seed, storage);
     applySet(o, seed);
+    applyNoteDates(o, seed);
     if (o.wrote === '1') seedWrote(o, seed, storage);
     seedPrefs(o, storage);
     // noteMove=<taskId>:<days>: the chart note already holds that task moved
@@ -420,6 +450,15 @@
           }
           GTDev.slot = sl;
         }
+        // §8.12: a task note's dates changed elsewhere, then a resume.
+        else if (p[0] === 'nd' && t && t.note) {
+          var nn = GTDev.mock.note(t.note);
+          nn.scheduledAt = p[2] || null;
+          nn.completeBy = p[3] || null;
+          nn.updatedAt = GTDev.mock.db.tick();
+          S.store.refresh('resume');
+        }
+        else if (p[0] === 'usenote') { var ub = document.querySelector('#sheet [data-action="note-dates"]'); if (ub) ub.click(); }
         else if (p[0] === 'draft') {
           var ni = document.querySelector('#sheet [data-field="name"] input');
           if (ni) { ni.value = decodeURIComponent(p[1] || ''); ni.dispatchEvent(new Event('input', { bubbles: true })); }
