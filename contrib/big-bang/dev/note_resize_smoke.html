@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Big Bang note resize regression</title>
+<style>body { font: 14px monospace; } .fail { color: #b00; } iframe { width: 900px; height: 700px; }</style>
+<div id="sum">running…</div><div id="out"></div>
+<script>
+var results = [];
+function ok(name, pass, detail) { results.push({ name: name, pass: !!pass, detail: detail || '' }); }
+function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+var content = '# Preview\n<!--' + new Array(451).join('x') + '-->\n- one\n- two\n- three\n' + new Array(401).join('i ') + 'RESIZE_END';
+var block = { v: 1, view: { p: [30, 30], z: 1 }, items: { n1: { k: 'note', id: 'preview-note', p: [0, 0], w: 120 } } };
+var md = '# Resize test\n\n```synapse-bigbang\n' + JSON.stringify(block) + '\n```\n';
+document.write('<iframe id="app" src="../plugins/big-bang.html?board=' + encodeURIComponent(md) + '&seed=' +
+  encodeURIComponent(JSON.stringify([{ id: 'preview-note', title: 'Preview', content: content }])) + '"></iframe>');
+
+function pointer(W, type, target, x, y) {
+  target.dispatchEvent(new W.PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1,
+    pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }));
+}
+// Count laid-out characters inside the clipped preview; this measures what
+// fits on screen, rather than mistaking all of textContent for visible text.
+function visibleChars(W, body) {
+  var clip = body.getBoundingClientRect(), text = body.firstChild, n = 0;
+  for (var i = 0; text && i < text.length; i++) {
+    var range = W.document.createRange();
+    range.setStart(text, i); range.setEnd(text, i + 1);
+    var rect = range.getBoundingClientRect();
+    if (rect.width && rect.bottom <= clip.bottom + 1 && rect.left < clip.right && rect.top >= clip.top - 1) n++;
+  }
+  return n;
+}
+async function run() {
+  var W = document.getElementById('app').contentWindow;
+  for (var i = 0; i < 200; i++) {
+    if (W.BB && W.BB.app && W.BB.app.S.cache && W.BB.app.S.cache.get('preview-note')) break;
+    await wait(30);
+  }
+  var app = W.BB.app, S = app.S, mock = W.Synapse.__mock;
+  app.ops.select('n1'); await wait(60);
+  var card = W.document.querySelector('[data-id="n1"]'), body = card.querySelector('.cx');
+  ok('the host reads past the old 400-character limit', body.textContent.indexOf('RESIZE_END') >= 0, body.textContent);
+  ok('short source lines do not cap the preview at three source lines', body.textContent.indexOf('one · two · three · i') === 0);
+  var narrow = visibleChars(W, body), reads = mock.queries.length, undos = S.store.undo.length;
+  var r = app.itemScreenRect('n1'), x = r.right - 1, y = (r.top + r.bottom) / 2;
+  var stage = W.document.getElementById('stage');
+  pointer(W, 'pointerdown', card.querySelector('.grip'), x, y);
+  pointer(W, 'pointermove', stage, x + 340 * S.k, y);
+  await wait(60);
+  var during = visibleChars(W, body);
+  ok('preview reveals more text during the resize gesture', during > narrow, narrow + ' -> ' + during);
+  ok('a wide preview reveals text beyond the old 220-character cap', during > 220, String(during));
+  pointer(W, 'pointerup', stage, x + 340 * S.k, y);
+  await wait(60);
+  ok('the gesture stores the wider width', S.store.board.items.n1.w === 460);
+  ok('resizing is one undo step', S.store.undo.length === undos + 1);
+  ok('resizing uses the cached preview without another note query', mock.queries.length === reads);
+  var scene = W.BB.export.scene(S.store.board, { faceOf: function (id) { return W.BB.notes.face(S.store.board, id, S.cache); }, measure: W.BB.export.canvasMeasure() });
+  var wideExport = scene.cards[0].body.lines.join(' ');
+  ok('export also reveals text beyond the old character cap', wideExport.length > 220, String(wideExport.length));
+  app.ops.undo(); await wait(60);
+  ok('undo restores the narrow width and preview', S.store.board.items.n1.w === 120 && visibleChars(W, body) === narrow);
+  app.ops.redo(); await wait(60);
+  ok('redo restores the expanded preview', S.store.board.items.n1.w === 460 && visibleChars(W, body) === during);
+  await app.ops.save();
+  var saved = W.BB.board.read(mock.notes['mock-note-1'].content);
+  ok('save preserves the chosen width', saved.board.items.n1.w === 460);
+  ok('preview expansion does not rewrite the source note', mock.notes['preview-note'].content === content);
+}
+function report() {
+  results.forEach(function (r) {
+    var row = document.createElement('div'); row.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    row.textContent = r.name; document.getElementById('out').appendChild(row);
+    if (!r.pass) { var pre = document.createElement('pre'); pre.textContent = r.detail; row.after(pre); }
+  });
+  var passed = results.filter(function (r) { return r.pass; }).length;
+  document.getElementById('sum').textContent = passed + '/' + results.length + ' resize assertions passed';
+}
+run().catch(function (e) { ok('regression completes', false, e.stack || String(e)); }).then(report);
+</script>
+</html>

@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Big Bang annotation multiline smoke</title>
+<style>
+  body { font: 13px/1.5 monospace; padding: 16px; }
+  .pass { color: #176c40; } .fail { color: #b42318; }
+  #sum { font-weight: bold; }
+  iframe { width: 390px; height: 720px; }
+</style>
+</head>
+<body>
+<div id="sum">running…</div>
+<div id="out"></div>
+<script>
+// Run with the same local server and dev/chrome.js as app_smoke.html.
+var results = [];
+function ok(name, value, detail) { results.push({ name: name, pass: !!value, detail: detail || '' }); }
+function eq(name, actual, expected) {
+  ok(name, actual === expected, 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+}
+function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+function ready() {
+  var tries = 0;
+  return new Promise(function (resolve, reject) {
+    (function poll() {
+      var W = document.getElementById('f').contentWindow;
+      if (W && W.BB && W.BB.app && W.BB.app.S.booted && W.BB.app.S.store) return resolve(W);
+      if (++tries > 400) return reject(new Error('app did not boot'));
+      setTimeout(poll, 25);
+    })();
+  });
+}
+var block = {
+  v: 1, view: { p: [30, 30], z: 1 },
+  items: {
+    a1: { k: 'annot', t: 'Original annotation', p: [0, 0], w: 260 },
+    s1: { k: 'sticky', t: 'Original sticky', p: [0, 220] },
+    s2: { k: 'sticky', t: 'Second sticky', p: [260, 220] }
+  },
+  links: [{ i: 'l1', a: 's1', b: 's2', t: 'Original label' }]
+};
+var md = '# Multiline\n\n```synapse-bigbang\n' + JSON.stringify(block) + '\n```\n';
+// Initial parse navigation avoids virtual-time deadlocks in headless Chrome.
+document.write('<iframe id="f" src="../plugins/big-bang.html?board=' + encodeURIComponent(md) + '"></iframe>');
+
+ready().then(async function (W) {
+  var app = W.BB.app, S = app.S, doc = W.document;
+  function text(id) { return S.store.board.items[id].t; }
+  function field() { return S.field; }
+  function key(name, options) {
+    var event = new W.KeyboardEvent('keydown', Object.assign({ key: name, bubbles: true, cancelable: true }, options));
+    field().dispatchEvent(event);
+    return event;
+  }
+  function put(value) {
+    field().textContent = value;
+    field().dispatchEvent(new W.Event('input', { bubbles: true }));
+  }
+  function caretAtEnd() {
+    var range = doc.createRange(), selection = W.getSelection();
+    range.selectNodeContents(field()); range.collapse(false);
+    selection.removeAllRanges(); selection.addRange(range);
+  }
+
+  app.ops.edit('a1');
+  put('First line');
+  caretAtEnd();
+  var enter = key('Enter');
+  eq('Return keeps the annotation open', S.editing, 'a1');
+  ok('Return permits the browser to insert a line break', !enter.defaultPrevented);
+  // Synthetic keydown cannot run a browser default action. Exercise the real
+  // contenteditable paragraph insertion that the unhandled Return invokes.
+  if (S.editing === 'a1') {
+    ok('the browser inserts a paragraph in the live annotation', doc.execCommand('insertParagraph', false));
+    ok('the browser inserts text on the second line', doc.execCommand('insertText', false, 'Second line'));
+    eq('both lines remain in the live editor', field().innerText, 'First line\nSecond line');
+    eq('the saved model is unchanged until the edit finishes', text('a1'), 'Original annotation');
+    var before = S.store.undo.length;
+    var commit = key('Enter', { ctrlKey: true });
+    ok('Ctrl+Return consumes the shortcut', commit.defaultPrevented);
+    eq('Ctrl+Return finishes the annotation', S.editing, null);
+    eq('both lines are saved', text('a1'), 'First line\nSecond line');
+    eq('the multiline edit is one board undo step', S.store.undo.length, before + 1);
+    var ct = doc.querySelector('.bb-card[data-id="a1"] .ct');
+    eq('the rendered annotation keeps both lines', ct.textContent, 'First line\nSecond line');
+    eq('the rendered annotation preserves line breaks', W.getComputedStyle(ct).whiteSpace, 'pre-wrap');
+    app.ops.undo();
+    eq('undo restores the previous annotation', text('a1'), 'Original annotation');
+    app.ops.redo();
+    eq('redo restores the line break', text('a1'), 'First line\nSecond line');
+  }
+
+  app.ops.edit('a1');
+  eq('reopening restores the multiline editor', field().innerText, 'First line\nSecond line');
+  var shifted = key('Enter', { shiftKey: true });
+  eq('Shift+Return also keeps the annotation open', S.editing, 'a1');
+  ok('Shift+Return permits a native line break', !shifted.defaultPrevented);
+  put('First line\nSecond line\nThird line');
+  var cmd = key('Enter', { metaKey: true });
+  ok('Cmd+Return consumes the shortcut', cmd.defaultPrevented);
+  eq('Cmd+Return saves all three lines', text('a1'), 'First line\nSecond line\nThird line');
+  eq('Cmd+Return finishes editing', S.editing, null);
+
+  app.ops.edit('a1');
+  put('Line from blur\nAnother line');
+  field().dispatchEvent(new W.FocusEvent('blur'));
+  eq('blur still finishes editing', S.editing, null);
+  eq('blur saves all annotation lines', text('a1'), 'Line from blur\nAnother line');
+  await app.ops.save();
+  var saved = W.BB.board.parse(W.Synapse.__mock.notes['mock-note-1'].content);
+  eq('the saved board reloads with its line breaks', saved.items.a1.t, 'Line from blur\nAnother line');
+
+  // Candidate confirmation and cancellation belong to the IME, including
+  // WebViews that signal composition only through legacy keyCode 229.
+  app.ops.edit('a1');
+  put('Composing\n文字');
+  [
+    { key: 'Enter', isComposing: true, ctrlKey: true },
+    { key: 'Escape', isComposing: true },
+    { key: 'Enter', keyCode: 229, metaKey: true },
+    { key: 'Escape', keyCode: 229 }
+  ].forEach(function (options) {
+    var event = key(options.key, options);
+    eq('IME ' + JSON.stringify(options) + ' keeps the editor open', S.editing, 'a1');
+    ok('IME ' + JSON.stringify(options) + ' is not intercepted', !event.defaultPrevented);
+  });
+  key('Escape');
+  eq('ordinary Escape still cancels editing', S.editing, null);
+  eq('cancelling leaves the committed multiline text', text('a1'), 'Line from blur\nAnother line');
+
+  app.ops.edit('s1');
+  put('Sticky first line');
+  var stickyEnter = key('Enter');
+  eq('Return keeps a sticky open too', S.editing, 's1');
+  ok('sticky Return permits a native line break', !stickyEnter.defaultPrevented);
+  put('Sticky first line\nSticky second line');
+  key('Enter', { ctrlKey: true });
+  eq('sticky Ctrl+Return commits', S.editing, null);
+  eq('sticky Ctrl+Return saves both lines', text('s1'), 'Sticky first line\nSticky second line');
+  app.ops.edit('l1');
+  put('Link edited');
+  key('Enter');
+  eq('link-label Return still commits', S.editing, null);
+  eq('link-label Return saves its text', W.BB.model.link(S.store.board, 'l1').t, 'Link edited');
+
+  var fresh = app.ops.annotate([]);
+  put('Fresh annotation');
+  key('Enter');
+  eq('Return keeps a new annotation open', S.editing, fresh);
+  put('Fresh annotation\nSecond line');
+  key('Enter', { ctrlKey: true });
+  eq('a newly created annotation saves multiline text', text(fresh), 'Fresh annotation\nSecond line');
+  app.ops.undo();
+  ok('one undo removes the whole newly created annotation', !S.store.board.items[fresh]);
+  await wait(40);
+}).catch(function (error) {
+  ok('multiline smoke ran to completion', false, String(error && error.stack || error));
+}).then(function () {
+  var fails = 0;
+  results.forEach(function (r) {
+    var row = document.createElement('div');
+    row.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    row.textContent = r.name;
+    document.getElementById('out').appendChild(row);
+    if (!r.pass) {
+      fails++;
+      var detail = document.createElement('pre'); detail.textContent = r.detail;
+      document.getElementById('out').appendChild(detail);
+    }
+  });
+  document.getElementById('sum').textContent = (results.length - fails) + '/' + results.length + ' app assertions passed';
+});
+</script>
+</body>
+</html>

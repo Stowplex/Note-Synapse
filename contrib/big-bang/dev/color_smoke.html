@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Big Bang annotation colour regression</title>
+<style>
+  body { font: 13px/1.5 system-ui, sans-serif; }
+  .pass { color: #176232; } .fail { color: #b42318; }
+  iframe { width: 700px; height: 700px; }
+</style>
+<div id="sum">running…</div>
+<div id="out"></div>
+<script>
+// Run with the shared browser runner: node dev/chrome.js dev/color_smoke.html
+// Use the real colour selector and computed styles. Class-name assertions
+// alone cannot catch a later border rule hiding the selected colour.
+var results = [];
+function ok(name, pass, detail) { results.push({ name: name, pass: !!pass, detail: detail || '' }); }
+function eq(name, actual, expected) { ok(name, actual === expected, 'expected ' + expected + ', got ' + actual); }
+function report() {
+  results.forEach(function (r) {
+    var row = document.createElement('div');
+    row.className = 'row ' + (r.pass ? 'pass' : 'fail');
+    row.textContent = r.name;
+    document.getElementById('out').appendChild(row);
+    if (!r.pass) {
+      var detail = document.createElement('pre');
+      detail.textContent = r.detail;
+      document.getElementById('out').appendChild(detail);
+    }
+  });
+  document.getElementById('sum').textContent = results.filter(function (r) { return r.pass; }).length +
+    '/' + results.length + ' assertions passed';
+}
+function rgb(hex) {
+  return 'rgb(' + [1, 3, 5].map(function (n) { return parseInt(hex.slice(n, n + 2), 16); }).join(', ') + ')';
+}
+function luminance(color) {
+  var channels = color.match(/\d+/g).slice(0, 3).map(function (v) {
+    v = Number(v) / 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+function contrast(a, b) {
+  a = luminance(a); b = luminance(b);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+function button(W, label) {
+  return Array.from(W.document.querySelectorAll('#bottombar button')).find(function (b) {
+    return b.textContent === label;
+  });
+}
+var block = { v: 1, items: {
+  s1: { k: 'sticky', t: 'Freeform sticky', p: [0, 0] },
+  a1: { k: 'annot', t: 'Linked annotation', p: [200, 100], at: [{ i: 's1' }] }
+} };
+document.write('<iframe id="app" src="../plugins/big-bang.html?board=' +
+  encodeURIComponent('```synapse-bigbang\n' + JSON.stringify(block) + '\n```\n') + '"></iframe>');
+var frame = document.getElementById('app');
+var started = Date.now();
+(function waitForBoot() {
+  var W = frame.contentWindow;
+  if (!(W && W.BB && W.BB.app && W.BB.app.S.booted && W.BB.app.S.store)) {
+    if (Date.now() - started > 10000) { ok('app boots', false, 'timed out'); report(); return; }
+    setTimeout(waitForBoot, 25);
+    return;
+  }
+  try {
+    var app = W.BB.app, ex = W.BB.export;
+    var sheet = W.document.styleSheets[0];
+    var darkRule = Array.from(sheet.cssRules).find(function (rule) {
+      return rule.media && rule.media.mediaText.indexOf('prefers-color-scheme') >= 0;
+    });
+    var palettes = {
+      light: {
+        blue: '#e4e9ff', pink: '#fbe3ef', teal: '#d9f3ee', amber: '#fff0d2',
+        violet: '#ece3ff', sky: '#e0ecff', green: '#dcf5e8', rose: '#fce1ec'
+      },
+      dark: {
+        blue: '#252d4f', pink: '#422538', teal: '#163c37', amber: '#40321b',
+        violet: '#332746', sky: '#20344e', green: '#193b2f', rose: '#432636'
+      }
+    };
+    ['light', 'dark'].forEach(function (theme) {
+      darkRule.media.mediaText = theme === 'dark' ? 'all' : 'not all';
+      ['s1', 'a1'].forEach(function (id) {
+        app.ops.select(id);
+        button(W, 'Actions').click();
+        button(W, 'Colour').click();
+        var card = W.document.querySelector('.bb-card[data-id="' + id + '"]');
+        var initial = W.getComputedStyle(card).backgroundColor;
+        app.COLOURS.forEach(function (name) {
+          W.document.querySelector('#bottombar .sw[title="' + name + '"]').click();
+          var prefix = theme + ' ' + id + ' ' + name + ': ';
+          var css = W.getComputedStyle(card);
+          eq(prefix + 'selector stores colour', app.S.store.board.items[id].c, name);
+          eq(prefix + 'paper visibly changes', css.backgroundColor, rgb(palettes[theme][name]));
+          var swatch = W.document.querySelector('#bottombar .sw[title="' + name + '"]');
+          var sample = W.document.createElement('div');
+          sample.style.color = 'var(--c-' + name + ')';
+          W.document.body.appendChild(sample);
+          var stroke = W.getComputedStyle(sample).color;
+          sample.remove();
+          eq(prefix + 'selection preserves stripe', css.borderLeftColor, stroke);
+          ok(prefix + 'selector shows current colour', swatch.classList.contains('on'));
+          ok(prefix + 'text contrast is at least 4.5', contrast(css.backgroundColor, W.getComputedStyle(card.querySelector('.ct')).color) >= 4.5);
+          if (id === 'a1') eq(prefix + 'leader matches', W.getComputedStyle(W.document.querySelector('.bb-lead')).stroke, stroke);
+          var scene = ex.scene(app.S.store.board);
+          var svg = new W.DOMParser().parseFromString(ex.svg(scene), 'image/svg+xml');
+          ok(prefix + 'export uses matching light paper', Array.from(svg.querySelectorAll('rect')).some(function (r) {
+            return r.getAttribute('fill') === palettes.light[name];
+          }));
+        });
+        app.ops.select(null);
+        eq(theme + ' ' + id + ': colour survives deselection', W.getComputedStyle(card).backgroundColor, rgb(palettes[theme].violet));
+        app.ops.undo();
+        eq(theme + ' ' + id + ': undo restores previous colour', W.getComputedStyle(card).backgroundColor, rgb(palettes[theme].pink));
+        app.ops.redo();
+        eq(theme + ' ' + id + ': redo restores chosen colour', W.getComputedStyle(card).backgroundColor, rgb(palettes[theme].violet));
+        app.ops.select(id);
+        button(W, 'Actions').click();
+        button(W, 'Colour').click();
+        button(W, 'None').click();
+        eq(theme + ' ' + id + ': None restores original paper', W.getComputedStyle(card).backgroundColor, initial);
+      });
+    });
+  } catch (error) { ok('colour regression completes', false, error.stack || String(error)); }
+  report();
+})();
+</script>
+</html>

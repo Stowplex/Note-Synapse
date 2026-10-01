@@ -59,7 +59,11 @@ var budget = process.env.BB_BUDGET || '300000';
  */
 var FLOORS = {
   'app_smoke.html': 1389,
-  'auto_smoke.html': 1148
+  'auto_smoke.html': 1149,
+  'color_smoke.html': 224,
+  'annotation_multiline_smoke.html': 42,
+  'annotation_links_smoke.html': 43,
+  'note_resize_smoke.html': 12
 };
 var floor = process.env.BB_MIN ? Number(process.env.BB_MIN)
   : (FLOORS[path.basename(page.split('?')[0])] || 1);

@@ -834,7 +834,7 @@ function run(W) {
 
   var excerptQueries = mock.queries.filter(function (q) { return /substr\(content/.test(q); });
   eq('every card resolved in ONE query', excerptQueries.length, 1);
-  ok('and that query was bounded in SQL', /substr\(content, 1, 400\)/.test(excerptQueries[0]), excerptQueries[0]);
+  ok('and that query was bounded in SQL', /substr\(content, 1, 8192\)/.test(excerptQueries[0]), excerptQueries[0]);
 
   /* ---------------- the card face ---------------- */
 

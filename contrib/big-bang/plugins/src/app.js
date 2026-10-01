@@ -148,6 +148,8 @@
     // shows one thing, and a selection that meant two would have to choose.
     linkSel: null,
     groupSel: null,
+    // An existing annotation waiting for a link or card to be tapped.
+    attaching: null,
     // Which second-level bar is showing - 'colour', 'align', 'head', 'dash'.
     barMode: '',
     // The id whose text has the caret in it, and the id of a box created by
@@ -1251,6 +1253,7 @@
 
   function setReadOnly(why, actions) {
     S.readOnly = true;
+    S.attaching = null;
     S.why = why;
     banner(why, 'warn', actions);
     return true;
@@ -1865,6 +1868,7 @@
     Object.keys(S.sel).forEach(function (id) { if (!M.item(b, id)) delete S.sel[id]; });
     if (S.linkSel && !M.link(b, S.linkSel)) S.linkSel = null;
     if (S.groupSel && !M.group(b, S.groupSel)) S.groupSel = null;
+    if (S.attaching && M.kindOf(b, S.attaching) !== 'annot') S.attaching = null;
     // endEdit, not a bare null: the element has to stop being contentEditable
     // or nothing taps that card again (see endEdit).
     if (S.editing && !M.any(b, S.editing)) endEdit();
@@ -1937,6 +1941,7 @@
   };
 
   A.ops.select = function (id, additive) {
+    S.attaching = null;
     if (!additive) S.sel = Object.create(null);
     if (id) S.sel[id] = true;
     S.barOpen = false;
@@ -1947,6 +1952,7 @@
   };
 
   function clearSel() {
+    S.attaching = null;
     S.sel = Object.create(null);
     S.selectMode = false;
     S.barOpen = false;
@@ -2331,20 +2337,86 @@
    */
   A.ops.setAnchors = function (id, anchors) {
     if (!editable()) return false;
+    var annot = M.item(S.store.board, id);
+    if (!annot || annot.k !== 'annot') return false;
     var abs = S.r.absOf(S.store.board, id);
     if (!abs) return false;
     var changed = S.store.mutate('re-point an annotation', function (b) {
+      var before = JSON.stringify(M.item(b, id));
       if (!M.setAnchors(b, id, anchors)) return false;
       var it = M.item(b, id);
-      if (!it.at.length) { delete it.reanchor; return M.moveItem(b, id, abs); }
-      var o = S.r.anchorOrigin(b, id);
-      if (!o) { it.reanchor = true; return M.moveItem(b, id, abs); }
-      return M.setAnnotOffset(b, id, [abs[0] - o[0], abs[1] - o[1]]);
+      if (!it.at.length) { delete it.reanchor; M.moveItem(b, id, abs); }
+      else {
+        var o = S.r.anchorOrigin(b, id);
+        if (!o) { it.reanchor = true; M.moveItem(b, id, abs); }
+        else M.setAnnotOffset(b, id, [abs[0] - o[0], abs[1] - o[1]]);
+      }
+      // Adding another anchor need not change the offset. It still needs a
+      // save, just as changing the first anchor does.
+      return JSON.stringify(it) !== before;
     });
     redraw();
     if (changed) markDirty('edit');
     return changed;
   };
+
+  A.ops.attachAnnotation = function (id) {
+    if (!editable()) return false;
+    if (S.editing) commitEdit();
+    if (M.kindOf(S.store.board, id) !== 'annot') return false;
+    clearSel();
+    S.sel[id] = true;
+    S.barOpen = true;
+    S.attaching = id;
+    redraw();
+    return true;
+  };
+
+  A.ops.cancelAttach = function () {
+    if (!S.attaching) return false;
+    S.attaching = null;
+    redraw();
+    return true;
+  };
+
+  // Only the explicit Attach action changes an existing annotation's
+  // anchors. Normal taps retain their selection and text-editing behavior.
+  function attachTo(target) {
+    var id = S.attaching, board = S.store.board;
+    if (!id) return false;
+    if (!editable()) { A.ops.cancelAttach(); return false; }
+    var it = M.item(board, id), kind = M.kindOf(board, target);
+    if (!it || it.k !== 'annot') { A.ops.cancelAttach(); return false; }
+    if (kind !== 'link' && kind !== 'note' && kind !== 'sticky') {
+      toast('Choose a link, note card, or sticky.');
+      return false;
+    }
+    // A link whose endpoint ultimately follows this annotation would make
+    // its position depend on itself. Reject that cycle before mutating.
+    var seen = Object.create(null);
+    function dependsOnAnnotation(other) {
+      if (other === id) return true;
+      if (seen[other]) return false;
+      seen[other] = true;
+      var link = M.link(board, other), item = M.item(board, other);
+      if (link) return dependsOnAnnotation(link.a) || dependsOnAnnotation(link.b);
+      return !!(item && item.k === 'annot' && (item.at || []).some(function (a) {
+        return dependsOnAnnotation(a.i || a.l);
+      }));
+    }
+    if (dependsOnAnnotation(target)) {
+      toast('That link already depends on this annotation. Choose another link or card.');
+      return false;
+    }
+    var anchor = kind === 'link' ? { l: target } : { i: target };
+    var anchors = it.at || [];
+    if (anchors.some(function (a) { return a.i === anchor.i && a.l === anchor.l; })) {
+      toast('This annotation is already attached there.');
+      return false;
+    }
+    S.attaching = null;
+    return A.ops.setAnchors(id, anchors.concat([anchor]));
+  }
 
   /* ==================================================================== */
   /* writes to other people's notes                                        */
@@ -3411,9 +3483,17 @@
       A.ops.keepVisible();
     };
     field.onkeydown = function (e) {
-      // Enter commits; shift-Enter breaks a line, because a sticky is a note
-      // to yourself and those run to more than one.
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
+      // Enter used to confirm an IME candidate must never end the edit.
+      // keyCode 229 covers WebViews that omit isComposing on that keydown.
+      if (e.isComposing || e.keyCode === 229) return;
+      // An annotation or sticky is a text box: Enter belongs to the browser,
+      // which inserts a line break and keeps its native text undo history.
+      // Ctrl/Cmd-Enter finishes it; tapping away still commits through blur.
+      // Link labels and group names retain Enter to finish.
+      var multiline = kind === 'annot' || kind === 'sticky';
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || (!multiline && !e.shiftKey))) {
+        e.preventDefault(); commitEdit();
+      }
       else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
     };
     field.oninput = function () { A.ops.keepVisible(); };
@@ -3792,6 +3872,7 @@
        * need to. This is the one place that decides.
        */
       tapItem: function (id) {
+        if (S.attaching) return attachTo(id);
         /*
          * A suggested link, before anything else. Its id is not a board id -
          * `M.kindOf` answers null for it and every branch below would fall
@@ -3855,6 +3936,7 @@
        * bar, and asks before it writes.
        */
       tapTick: function (id) {
+        if (S.attaching) return attachTo(id);
         if (S.editing) commitEdit();
         A.ops.tick(id);
       },
@@ -3864,6 +3946,7 @@
       },
 
       tapBackground: function () {
+        if (S.attaching) { A.ops.cancelAttach(); return; }
         if (S.editing) { commitEdit(); return; }
         if (!selCount() && !S.selectMode && !S.linkSel && !S.groupSel) return;
         clearSel();
@@ -3884,6 +3967,7 @@
        * it the way a tap would.
        */
       longPressItem: function (id) {
+        if (S.attaching) return attachTo(id);
         if (S.editing) commitEdit();
         // Nothing to select for, in an embed: every action a selection leads
         // to is refused, and a bar it could open is not drawn.
@@ -3905,6 +3989,7 @@
       // A press on empty canvas leaves a sticky where the finger was, ready to
       // be typed into. Nothing is written down until it says something.
       longPressBackground: function (x, y) {
+        if (S.attaching) { A.ops.cancelAttach(); return; }
         if (S.editing) { commitEdit(); return; }
         A.ops.newSticky(x, y);
       },
@@ -3917,6 +4002,7 @@
        * to wherever its anchor happens to be.
        */
       dragStart: function (id, opts) {
+        if (S.attaching) return null;
         if (!editable()) return null;
         if (S.editing) commitEdit();
         opts = opts || {};
@@ -4044,7 +4130,7 @@
        * matters mid-gesture is which two things it will join.
        */
       linkStart: function (id) {
-        if (S.readOnly) return false;
+        if (S.readOnly || S.attaching) return false;
         if (S.editing) commitEdit();
         var box = S.r.box(S.store.board, id);
         if (!box) return false;
@@ -4082,7 +4168,7 @@
       },
 
       resizeStart: function (id) {
-        if (S.readOnly) return null;
+        if (S.readOnly || S.attaching) return null;
         var it = M.item(S.store.board, id);
         return it ? RENDER.widthOf(it) : null;
       },
@@ -4260,6 +4346,13 @@
     var board = S.store.board;
     var ids = selIds();
     var rw = !S.readOnly;
+
+    if (S.attaching && rw) {
+      blabel(bar, 'Tap a link or card to attach');
+      bar.appendChild(button('Cancel', function () { A.ops.cancelAttach(); }));
+      bar.className = 'one open';
+      return;
+    }
 
     /* ---- the AI's preview, which owns the bar while it stands ---- */
 
@@ -4453,6 +4546,7 @@
       }
       if (rw && kind === 'annot') {
         var it = M.item(board, id);
+        bar.appendChild(button('Attach to…', function () { A.ops.attachAnnotation(id); }));
         if (it.at && it.at.length) {
           bar.appendChild(button('Detach', function () { A.ops.setAnchors(id, []); }));
         }

@@ -14,7 +14,7 @@
  *     updatedAt, pinned, isArchived.
  *   - runQuery caps results at 100 rows and says so (`truncated`, `totalRows`).
  *     Anything that can exceed that pages with LIMIT/OFFSET.
- *   - Excerpts are truncated IN SQL (substr(content, 1, 400)). note.content is
+ *   - Excerpts are truncated IN SQL (substr(content, 1, 8192)). note.content is
  *     one of the columns the project flags as potentially huge, and a plain
  *     rawQuery has no chunked-TEXT handling. For the same reason every read of
  *     a whole note asks for length(content) alongside it and refuses a body
@@ -62,7 +62,7 @@
   var S = global.Synapse;
   HOST.isMock = !(global.flutter_inappwebview && S);
   HOST.PAGE = 100;              // runQuery's row cap
-  HOST.EXCERPT = 400;           // characters, truncated in SQL
+  HOST.EXCERPT = 8192;          // bounded source preview; layout decides what fits
   HOST.BOARDS = 24;             // boards on the home list, per read
 
   function sqlId(id) { return String(id == null ? '' : id).replace(/[^A-Za-z0-9_\-]/g, ''); }
