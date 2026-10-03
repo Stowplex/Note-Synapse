@@ -24,6 +24,7 @@ import '../services/web_session_service.dart';
 import '../screens/settings/web_login_browser_screen.dart';
 import '../screens/note_selection_dialog.dart';
 import 'approval_dialog.dart';
+import 'route_resume_listener.dart';
 import 'tag_selection_dialog.dart';
 
 typedef UserAppOpenNote = Future<void> Function(Note note, bool replaceWindow);
@@ -399,7 +400,15 @@ class _UserAppWebViewState extends State<UserAppWebView> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_bridgeReady) return const SizedBox.shrink();
+    // Tells the page when a screen it opened (a note, say) is popped, so a
+    // plugin showing note data can refresh.
+    return RouteResumeListener(
+      onResumed: () => unawaited(_bridge.notifyResumed()),
+      child: _bridgeReady ? _buildWebView() : const SizedBox.shrink(),
+    );
+  }
+
+  Widget _buildWebView() {
     final bridge = _bridge;
     final htmlData = widget.revision.appCode;
 

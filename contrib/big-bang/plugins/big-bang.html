@@ -35,6 +35,8 @@
     /* Card and link colours, named by the `c` field in the block. */
     --c-blue: #4f6ef7; --c-pink: #e0559a; --c-teal: #0d9488; --c-amber: #d97706;
     --c-violet: #7c3aed; --c-sky: #2563eb; --c-green: #059669; --c-rose: #db2777;
+    --paper-blue: #e4e9ff; --paper-pink: #fbe3ef; --paper-teal: #d9f3ee; --paper-amber: #fff0d2;
+    --paper-violet: #ece3ff; --paper-sky: #e0ecff; --paper-green: #dcf5e8; --paper-rose: #fce1ec;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -63,6 +65,8 @@
       --shadow-2: 0 6px 28px rgba(0, 0, 0, 0.6);
       --c-blue: #7d90ff; --c-pink: #f472b6; --c-teal: #2dd4bf; --c-amber: #fbbf24;
       --c-violet: #a78bfa; --c-sky: #60a5fa; --c-green: #34d399; --c-rose: #f9a8d4;
+      --paper-blue: #252d4f; --paper-pink: #422538; --paper-teal: #163c37; --paper-amber: #40321b;
+      --paper-violet: #332746; --paper-sky: #20344e; --paper-green: #193b2f; --paper-rose: #432636;
     }
   }
 
@@ -210,23 +214,19 @@
    * The one place a board's colour NAME becomes a colour.
    *
    * render.js gives a coloured object two classes: `col`, meaning it wears one,
-   * and `c-<name>`, saying which. The name sets --c here and nothing else, and
+   * and `c-<name>`, saying which. The name sets the stroke and paper colours,
    * every rule that wears a colour - a card's stripe, a line's stroke, a
    * handle's ring, a frame's border, a tab - reads --c. It used to be this
    * eight-way block written out five times; a ninth colour is now one line.
    */
-  .c-blue { --c: var(--c-blue); }
-  .c-pink { --c: var(--c-pink); }
-  .c-teal { --c: var(--c-teal); }
-  .c-amber { --c: var(--c-amber); }
-  .c-violet { --c: var(--c-violet); }
-  .c-sky { --c: var(--c-sky); }
-  .c-green { --c: var(--c-green); }
-  .c-rose { --c: var(--c-rose); }
-
-  /* A card's `c` colour is a stripe, not a fill: the excerpt has to stay
-     readable in both themes, and a tinted card body cannot promise that. */
-  .bb-card.col { border-left: 3px solid var(--c); }
+  .c-blue { --c: var(--c-blue); --c-paper: var(--paper-blue); }
+  .c-pink { --c: var(--c-pink); --c-paper: var(--paper-pink); }
+  .c-teal { --c: var(--c-teal); --c-paper: var(--paper-teal); }
+  .c-amber { --c: var(--c-amber); --c-paper: var(--paper-amber); }
+  .c-violet { --c: var(--c-violet); --c-paper: var(--paper-violet); }
+  .c-sky { --c: var(--c-sky); --c-paper: var(--paper-sky); }
+  .c-green { --c: var(--c-green); --c-paper: var(--paper-green); }
+  .c-rose { --c: var(--c-rose); --c-paper: var(--paper-rose); }
 
   .bb-card.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2); }
 
@@ -268,6 +268,7 @@
   }
   .bb-card.k-sticky .ct {
     font-weight: 500; font-size: 14px; -webkit-line-clamp: 8; white-space: pre-wrap;
+    color: var(--card-ink, var(--sticky-ink));
   }
 
   /*
@@ -279,7 +280,7 @@
     padding: 8px 10px; min-height: 36px;
   }
   .bb-card.k-annot .ct {
-    font-weight: 500; font-size: 13px; font-style: italic; color: var(--muted);
+    font-weight: 500; font-size: 13px; font-style: italic; color: var(--card-ink, var(--muted));
     -webkit-line-clamp: 6; white-space: pre-wrap;
   }
 
@@ -297,6 +298,13 @@
   /* The card a link is being drawn from, and the one under the finger. */
   .bb-card.linking { box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-2); }
   .bb-card.target { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-2); }
+
+  /* Keep the chosen stripe visible after kind and selection border rules.
+     Freeform text also wears theme-specific paper and ink; note excerpts keep
+     their neutral card background. */
+  .bb-card.col { border-left: 3px solid var(--c); }
+  .bb-card.k-sticky.col { background: var(--c-paper, var(--sticky)); --card-ink: var(--text); }
+  .bb-card.k-annot.col { background: var(--c-paper, var(--surface-2)); --card-ink: var(--text); }
 
   /*
    * Lines.

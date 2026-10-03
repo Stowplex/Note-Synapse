@@ -255,9 +255,51 @@
              "attachments": { "added": [...], "removed": ["/path/to/file"] },
              "subnote": { 
                "added": [{"name": "Task name", "content": "Details"}], 
-               "removed": ["subnote_id"] 
+               "removed": ["subnote_id"],
+               "updated": [{"id": "subnote_id", "isCompleted": true, "name": "...", "content": "..."}]
              }
            }
+         * content.section: optional full heading line (e.g. "## Tasks", matched
+           against the trimmed line) that scopes the action to that section's
+           body, which ends at the next heading of the same or a higher level.
+           append/prepend then insert at the end/start of that section.
+         * content action "replace_text": { "action": "replace_text",
+           "old_text": "- [ ] Buy milk", "new_text": "- [x] Buy milk",
+           "section": "## Today" (optional) } changes exactly ONE occurrence of
+           old_text (exact match, no fuzzy matching) and leaves the rest of
+           the note alone. Use it for conditional in-place edits such as
+           ticking one checkbox or rewriting a block you read earlier.
+             - old_text must be a non-empty string; new_text is a string and
+               may be empty to delete the match. "action" may be omitted when
+               both old_text and new_text are given.
+             - 0 matches: the entry fails with
+               'replace_text: "old_text" was not found in ...' (someone else
+               changed the note; re-read it). Exception: if old_text is absent
+               but new_text is present exactly once and mostly overlaps
+               old_text, the edit counts as already applied and succeeds
+               without changing anything, so retrying is safe.
+             - 2 or more matches: the entry fails with
+               'replace_text: "old_text" matched N places in ...'; use a longer
+               old_text or add "section".
+             - Unknown section: the entry fails with 'Section not found: ...'.
+             replace_text and "section" are refused for a transient block note
+             (isBlockScope); use append/prepend/replace there.
+             These three messages reach your app verbatim in `errors`, as
+             'Updating note <id> failed: <message>', so you can tell a
+             conflict from other failures without re-reading the note. A
+             declined approval is reported differently: success is false and
+             error is 'User denied modification.'.
+         * subnote.updated: changes existing subnotes in place and KEEPS their
+           ids (a full-replacement `subNotes` list recreates every subnote with
+           new ids). Each entry needs `id`; `isCompleted` (boolean), `name` and
+           `content` (strings) are optional. Omitted fields, and a `name` that
+           is empty or only spaces, leave the subnote as it was. `updated` is
+           applied after `removed` and before `added`; an id listed in both
+           `removed` and `updated` is removed. An unknown id refuses the whole
+           entry with
+           'Updating note <id> failed: Subnote <subnoteId> not found in note
+           <id>; ...'. Read current ids with
+           `SELECT id, name, isCompleted FROM subnotes WHERE noteId = '<id>'`.
       
       ATTACHMENT FORMATS (for both 'attachments' list in replacement mode and 'attachments.added' in modification mode):
          * File path string: existing path in database (e.g., "/path/to/file.pdf")
@@ -276,6 +318,15 @@
        - noteId: a string of the note ID to open
        - replaceWindow: optional boolean (default: false). If true, replaces the current view with the note view. If false, pushes the note view on top.
      Response format: {success: boolean, error?: string}
+     The promise resolves as soon as the note screen opens, not when the user
+     leaves it. When the user comes back to your app, `window` receives a
+     'synapse:resumed' event (no detail); re-read any note data you show:
+       window.addEventListener('synapse:resumed', () => refresh());
+     It fires whenever your app's screen is uncovered after another full
+     screen (a note, a conversation, the merge screen) was opened above it,
+     even from inside a dialog, and then closed; closing only a dialog does
+     not fire it. Older hosts never fire it, so keep any existing
+     refresh-on-focus logic as a fallback.
    - Synapse.openConversations(notes: array, immersiveMode: bool = false) - Open the conversation chat screen or immersive screen with the list of notes as context notes
      Param format:
        - notes: array of note objects or note IDs (strings). Can be empty if immersiveMode is false. MUST NOT be empty if immersiveMode is true.
@@ -451,6 +502,20 @@
      }
    ]);
    
+   // Granular modification mode - tick one checkbox if it is still unticked
+   const r = await Synapse.updateNotes([{
+     id: 'note-id-123',
+     modification: { content: { action: 'replace_text',
+       old_text: '- [ ] Call Ana', new_text: '- [x] Call Ana', section: '## Today' } }
+   }]);
+   if (r.success && r.updatedCount === 0) console.warn(r.errors); // e.g. not found
+
+   // Granular modification mode - complete one subnote, keeping its id
+   await Synapse.updateNotes([{
+     id: 'note-id-123',
+     modification: { subnote: { updated: [{ id: 'subnote-id-1', isCompleted: true }] } }
+   }]);
+
    // Granular modification mode - add attachments without replacing existing
    const result3 = await Synapse.updateNotes([
      {
@@ -734,6 +799,16 @@
      `synapse:localechanged` on `window`; `event.detail` is the new tag and
      `Synapse.locale` is updated before the event. Refresh visible strings and
      accessibility attributes in place without reloading or resetting state.
+
+   - Synapse.theme (string, read-only) - 'light' or 'dark', following the
+     user's dark-mode setting in Note Synapse (not the OS setting). Style your
+     app to match. Older hosts do not set it, so fall back to the OS:
+       const theme = window.Synapse?.theme
+         || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+     When the user toggles dark mode while your app is open, `Synapse.theme`
+     is updated and then `window` receives a 'synapse:themechanged' event
+     whose `detail` is the new value:
+       window.addEventListener('synapse:themechanged', (e) => applyTheme(e.detail));
 
    - Synapse.space (object|null, read-only) - The Space the user is currently
      working in, or null when none is active. A Space is a saved filter the user

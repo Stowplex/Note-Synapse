@@ -5038,6 +5038,36 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String approvalAddSubNotes(String value) {
+    return '添加子笔记：$value';
+  }
+
+  @override
+  String approvalRemoveSubNotes(int count) {
+    return '移除 $count 条子笔记';
+  }
+
+  @override
+  String approvalCompleteSubNotes(int count) {
+    return '将 $count 条子笔记标记为已完成';
+  }
+
+  @override
+  String approvalUncompleteSubNotes(int count) {
+    return '将 $count 条子笔记标记为未完成';
+  }
+
+  @override
+  String approvalRenameSubNotes(String value) {
+    return '将子笔记重命名为：$value';
+  }
+
+  @override
+  String approvalEditSubNoteContent(int count) {
+    return '修改 $count 条子笔记的内容';
+  }
+
+  @override
   String get approvalDetailsTruncated => '…（显示内容已截断）';
 
   @override

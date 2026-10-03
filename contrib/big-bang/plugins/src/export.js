@@ -51,6 +51,10 @@
     colours: {
       blue: '#4f6ef7', pink: '#e0559a', teal: '#0d9488', amber: '#d97706',
       violet: '#7c3aed', sky: '#2563eb', green: '#059669', rose: '#db2777'
+    },
+    paperColours: {
+      blue: '#e4e9ff', pink: '#fbe3ef', teal: '#d9f3ee', amber: '#fff0d2',
+      violet: '#ece3ff', sky: '#e0ecff', green: '#dcf5e8', rose: '#fce1ec'
     }
   };
 
@@ -541,18 +545,27 @@
   function drawCard(c) {
     var P = EX.PALETTE, st = c.st;
     var fill = c.kind === 'sticky' ? P.sticky : (c.kind === 'annot' ? P.surface2 : (c.tomb ? P.surface2 : P.surface));
+    var paper = c.colour && (c.kind === 'sticky' || c.kind === 'annot');
+    if (paper) {
+      Object.keys(P.colours).some(function (name) {
+        if (P.colours[name] !== c.colour) return false;
+        fill = P.paperColours[name];
+        return true;
+      });
+    }
     var stroke = c.kind === 'sticky' ? P.stickyBorder : (c.tomb ? P.faint : P.border);
     var dashed = c.tomb || c.kind === 'annot';
     var out = '<rect x="' + r1(c.x) + '" y="' + r1(c.y) + '" width="' + c.w + '" height="' + c.h +
       '" rx="' + st.radius + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"' +
       (dashed ? ' stroke-dasharray="5 4"' : '') + '/>';
-    // The `c` colour is a stripe down the left edge, never a fill: a tinted
-    // card body cannot promise a legible excerpt, on screen or on paper.
+    // Every coloured card keeps its stripe. Freeform text uses the matching
+    // paper tint above; a note's excerpt keeps its neutral background.
     if (c.colour) {
       out += '<rect x="' + r1(c.x) + '" y="' + r1(c.y + 1) + '" width="3" height="' + r1(c.h - 2) +
         '" fill="' + c.colour + '"/>';
     }
     var ink = c.kind === 'sticky' ? P.stickyInk : (c.kind === 'annot' ? P.muted : (c.tomb || c.done ? P.muted : P.text));
+    if (paper) ink = P.text;
     if (c.blank) ink = P.faint;
     var tx = c.x + st.padX;
     var ty = c.y + st.padY;

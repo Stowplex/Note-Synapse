@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gantt harness</title>
+<style>
+  body { margin: 0; font: 13px -apple-system, system-ui, sans-serif; background: #0e1013; color: #e8eaf0;
+         display: flex; flex-direction: column; height: 100vh; }
+  header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 10px; border-bottom: 1px solid #262b36; }
+  select, button { font: inherit; background: #1f232c; color: #e8eaf0; border: 1px solid #262b36;
+                   border-radius: 8px; padding: 5px 9px; }
+  #wrap { flex: 1; display: grid; place-items: center; background: #16181d; }
+  iframe { width: 390px; height: 780px; border: 1px solid #262b36; border-radius: 22px; background: #fff; }
+  label { color: #8b93a5; }
+  a { color: #7d90ff; }
+</style>
+</head>
+<body>
+<header>
+  <label>note</label>
+  <select id="pick"></select>
+  <label>launch</label>
+  <select id="mode">
+    <option value="note">note_action on the note</option>
+    <option value="embed">embed of the note</option>
+    <option value="home">standalone (home)</option>
+  </select>
+  <label>size</label>
+  <select id="size">
+    <option value="390x780">phone 390×780</option>
+    <option value="844x390">landscape 844×390</option>
+    <option value="768x900">tablet 768×900</option>
+  </select>
+  <button id="reload">reload</button>
+  <button id="langEn">English</button>
+  <button id="langZh">中文</button>
+  <a href="auto_smoke.html" style="margin-left:auto">run smoke tests →</a>
+</header>
+<div id="wrap"><iframe id="f"></iframe></div>
+<script>
+/*
+ * Manual harness: the real shell (plugins/gantt.html) over the mock host,
+ * loaded through dev/shot.html (see dev/shell.js for the parameters). The
+ * mock keeps appState in sessionStorage here (persist=1), so a reload keeps it.
+ */
+var FILES = ['region-basic.md', 'big.json', 'empty', 'region-embed-mirror.md', 'region-unscheduled.md', 'cjk-emoji.md', 'crlf.md', 'future.md', 'malformed.md', 'two-blocks.md'];
+var pick = document.getElementById('pick');
+FILES.forEach(function (f) { var o = document.createElement('option'); o.value = f; o.textContent = f; pick.appendChild(o); });
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (q.get('fixture')) pick.value = q.get('fixture');
+  if (q.get('mode')) document.getElementById('mode').value = q.get('mode');
+  if (q.get('size')) document.getElementById('size').value = q.get('size');
+})();
+var LAUNCH = { note: 'note', embed: 'embed', home: 'home' };
+var f = document.getElementById('f');
+function load() {
+  var dims = document.getElementById('size').value.split('x');
+  f.style.width = dims[0] + 'px';
+  f.style.height = dims[1] + 'px';
+  f.src = 'shot.html?persist=1&app=gantt-harness&fixture=' + encodeURIComponent(pick.value) +
+    '&launch=' + LAUNCH[document.getElementById('mode').value] + '&r=' + Date.now();
+}
+function setLocale(t) { try { f.contentWindow.GTDev.mock.emit('localechanged', t); } catch (e) {} }
+pick.onchange = load;
+document.getElementById('mode').onchange = load;
+document.getElementById('size').onchange = load;
+document.getElementById('reload').onclick = load;
+document.getElementById('langEn').onclick = function () { setLocale('en-US'); };
+document.getElementById('langZh').onclick = function () { setLocale('zh-CN'); };
+load();
+</script>
+</body>
+</html>

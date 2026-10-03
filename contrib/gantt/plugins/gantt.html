@@ -1,0 +1,791 @@
+<!doctype html>
+<html lang="en" class="boot">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Gantt</title>
+<script>
+  // No-flash theme (§12.1): data-theme from the OS before first paint; the in-app override applies once appState loads.
+  (function (d, m) { m = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; d.setAttribute('data-theme', m); d.style.colorScheme = m; }(document.documentElement));
+  setTimeout(function () { document.documentElement.classList.remove('boot'); }, 300);
+</script>
+<style>
+  /* §12.2 tokens. theme.js holds the same values (a test compares them). */
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f4;
+    --surface-3: #e4e7ee;
+    --text: #191c22;
+    --muted: #6b7280;
+    --faint: #9aa1ae;
+    --border: #e2e5ea;
+    --g-bg: #ffffff;
+    --g-stripe: rgba(16,24,40,.025);
+    --g-weekend: rgba(16,24,40,.045);
+    --g-line: rgba(16,24,40,.07);
+    --g-line-strong: rgba(16,24,40,.14);
+    --g-header-bg: rgba(255,255,255,.92);
+    --g-drag-band: rgba(79,110,247,.10);
+    --accent: #4f6ef7;
+    --accent-soft: rgba(79,110,247,.12);
+    --accent-ink: #ffffff;
+    --today: #e5484d;
+    --today-ink: #ffffff;
+    --good: #059669;
+    --warn: #b45309;
+    --danger: #dc2626;
+    --warn-soft: rgba(180,83,9,.35);
+    --seg-lab: rgba(255,255,255,.88);
+    --g-shimmer: rgba(255,255,255,.55);
+    --sel-ring: 0 0 0 2px var(--accent), 0 0 0 5px var(--accent-soft);
+    --shadow-1: 0 1px 2px rgba(16,24,40,.08), 0 1px 3px rgba(16,24,40,.06);
+    --shadow-2: 0 8px 24px rgba(16,24,40,.18);
+    --bar-sheen: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0) 60%);
+    --radius-bar: 7px;
+    --dur-fast: 120ms;
+    --dur: 200ms;
+    --ease: cubic-bezier(.22,.61,.36,1);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, Roboto, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    /* Layout, set from JS (render.js) on resize. */
+    --row-h: 44px;
+    --bar-h: 26px;
+    --name-w: 132px;
+    --hdr-h: 44px;
+    --top-h: 48px;
+    --kb: 0px;
+    color-scheme: light;
+  }
+  :root[data-theme=dark] {
+    --bg: #0e1013;
+    --surface: #171a20;
+    --surface-2: #1f232c;
+    --surface-3: #2a2f3a;
+    --text: #e8eaf0;
+    --muted: #8b93a5;
+    --faint: #6b7280;
+    --border: #262b36;
+    --g-bg: #12151a;
+    --g-stripe: rgba(255,255,255,.025);
+    --g-weekend: rgba(255,255,255,.035);
+    --g-line: rgba(255,255,255,.06);
+    --g-line-strong: rgba(255,255,255,.12);
+    --g-header-bg: rgba(23,26,32,.92);
+    --g-drag-band: rgba(125,144,255,.14);
+    --accent: #7d90ff;
+    --accent-soft: rgba(125,144,255,.22);
+    --accent-ink: #0e1013;
+    --today: #ff6b70;
+    --today-ink: #1a0a0b;
+    --good: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --warn-soft: rgba(251,191,36,.35);
+    --seg-lab: rgba(18,21,26,.84);
+    --g-shimmer: rgba(255,255,255,.08);
+    --shadow-1: 0 1px 2px rgba(0,0,0,.5);
+    --shadow-2: 0 8px 28px rgba(0,0,0,.6);
+    --bar-sheen: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,0) 60%);
+    color-scheme: dark;
+  }
+
+  /* §12.3 palette. Each class sets the four hue variables for its theme. */
+  .c-indigo { --h-fill: #4f46e5; --h-tint: #e0e7ff; --h-stroke: #b2b3f7; --h-ink: #ffffff; }
+  .c-blue { --h-fill: #2563eb; --h-tint: #dbeafe; --h-stroke: #a1bff8; --h-ink: #ffffff; }
+  .c-sky { --h-fill: #0369a1; --h-tint: #e0f2fe; --h-stroke: #99c6e0; --h-ink: #ffffff; }
+  .c-teal { --h-fill: #0f766e; --h-tint: #ccfbf1; --h-stroke: #90d0c7; --h-ink: #ffffff; }
+  .c-emerald { --h-fill: #047857; --h-tint: #d1fae5; --h-stroke: #8fd0b8; --h-ink: #ffffff; }
+  .c-amber { --h-fill: #b45309; --h-tint: #fef3c7; --h-stroke: #e6c08a; --h-ink: #ffffff; }
+  .c-orange { --h-fill: #c2410c; --h-tint: #ffedd5; --h-stroke: #ebb695; --h-ink: #ffffff; }
+  .c-rose { --h-fill: #e11d48; --h-tint: #ffe4e6; --h-stroke: #f5a4b3; --h-ink: #ffffff; }
+  .c-pink { --h-fill: #be185d; --h-tint: #fce7f3; --h-stroke: #e8a5c3; --h-ink: #ffffff; }
+  .c-violet { --h-fill: #7c3aed; --h-tint: #ede9fe; --h-stroke: #c9b1f9; --h-ink: #ffffff; }
+  .c-slate { --h-fill: #475569; --h-tint: #e2e8f0; --h-stroke: #b0b9c5; --h-ink: #ffffff; }
+  :root[data-theme=dark] .c-indigo { --h-fill: #818cf8; --h-tint: #2a2f4b; --h-stroke: #515999; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-blue { --h-fill: #60a5fa; --h-tint: #23354b; --h-stroke: #3e679a; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-sky { --h-fill: #38bdf8; --h-tint: #1a3a4b; --h-stroke: #287599; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-teal { --h-fill: #2dd4bf; --h-tint: #183f3e; --h-stroke: #218278; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-emerald { --h-fill: #34d399; --h-tint: #193f36; --h-stroke: #258263; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-amber { --h-fill: #fbbf24; --h-tint: #453a1c; --h-stroke: #977620; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-orange { --h-fill: #fb923c; --h-tint: #453121; --h-stroke: #975d2d; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-rose { --h-fill: #fb7185; --h-tint: #452932; --h-stroke: #974957; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-pink { --h-fill: #f472b6; --h-tint: #44293c; --h-stroke: #934a73; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-violet { --h-fill: #a78bfa; --h-tint: #332f4b; --h-stroke: #67589a; --h-ink: #0b0d12; }
+  :root[data-theme=dark] .c-slate { --h-fill: #94a3b8; --h-tint: #2f343d; --h-stroke: #5c6674; --h-ink: #0b0d12; }
+
+  /* ------------------------------------------------------------ base */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+  /* The page never zooms (§13.1): no pinch or double-tap zoom anywhere; #gantt is none. */
+  html, body { touch-action: pan-x pan-y; }
+  html.boot body { visibility: hidden; }
+  html.no-anim *, html.no-anim *::before, html.no-anim *::after { transition: none !important; animation: none !important; }
+  body { font: 15px/1.35 var(--font); -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+         -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; }
+  #topbar { order: 0; }
+  #banner { order: 1; }
+  #gantt { order: 2; }
+  #home { order: 3; }
+
+  /* ---------------------------------------------------------- top bar */
+  /* The WebView always sits below the host's app bar, so no top inset here (device feedback round 1). */
+  #topbar { flex: none; display: flex; align-items: center; gap: 2px; min-height: var(--top-h);
+            padding: 2px max(6px, env(safe-area-inset-right)) 2px max(6px, env(safe-area-inset-left));
+            background: var(--surface); border-bottom: 1px solid var(--border); position: relative; z-index: 5; }
+  .tb-btn { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px;
+            background: none; color: var(--text); cursor: pointer; }
+  .tb-btn:active { background: var(--surface-2); }
+  .tb-btn svg { width: 22px; height: 22px; }
+  #title { flex: 1; min-width: 0; margin: 0 6px; font-size: 17px; font-weight: 680; letter-spacing: -.01em;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.embed #topbar { display: none; }
+
+  /* ---------------------------------------------------------- banner */
+  #banner { flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+            padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right));
+            background: var(--surface-2); border-bottom: 1px solid var(--border); color: var(--text); font-size: 14px; }
+  #banner::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+  #banner { flex-wrap: wrap; row-gap: 8px; }
+  #banner .b-text { flex: 1 1 calc(100% - 30px); min-width: 0; }
+  #banner button { flex: none; min-height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border);
+                   background: var(--surface); cursor: pointer; font-weight: 600; font-size: 14px; }
+
+  /* ---------------------------------------------------------- chart */
+  #gantt { flex: 1; min-height: 0; position: relative; display: grid; background: var(--g-bg);
+           grid-template-columns: var(--name-w) 1fr; grid-template-rows: var(--hdr-h) 1fr;
+           contain: strict; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  .g-corner { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 2px; padding: 0 0 0 2px;
+              min-width: 0;
+              background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); z-index: 3; }
+  /* The presets shrink to 24 px buttons beside the toggle; below that (render.js SEG_FIT) the column is .narrow and they hide. */
+  .seg { display: flex; flex: 0 1 auto; min-width: 0; margin: 0 auto; padding: 2px; border-radius: 10px; background: var(--surface-2); }
+  .g-root.narrow .g-corner .seg { display: none; }
+  .g-root.narrow .g-corner { justify-content: flex-end; }
+  .seg button { flex: 1 1 auto; min-width: 24px; max-width: 40px; width: 30px; height: 28px; padding: 0 2px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+                font-size: 12.5px; font-weight: 650; color: var(--muted); overflow: hidden; white-space: nowrap; }
+  .seg button[aria-pressed=true] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
+  .g-hdr-cv { grid-column: 2; grid-row: 1; display: block; z-index: 2; }
+  .g-names { grid-column: 1; grid-row: 2; position: relative; overflow: hidden; background: var(--surface);
+             border-right: 1px solid var(--border); z-index: 2; padding-left: env(safe-area-inset-left); }
+  .g-names-inner { position: absolute; left: 0; top: 0; right: 0; will-change: transform; }
+  .g-divider { grid-column: 1; grid-row: 2; justify-self: end; width: 20px; margin-right: -10px; z-index: 4; }
+  .g-body { grid-column: 2; grid-row: 2; position: relative; overflow: hidden; }
+  .g-grid-cv { position: absolute; left: 0; top: 0; display: block; }
+  .g-bars { position: absolute; left: 0; top: 0; width: 0; height: 0; will-change: transform; }
+  .g-overlay, .g-handles { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+  /* A gesture holds the camera: no transitions under a finger (§12.5). */
+  .g-root.live .g-bars, .g-root.live .g-names-inner, .g-root.live .g-bar, .g-root.live .g-name, .g-root.live .g-grp { transition: none; }
+
+  /* Zoom in, zoom out, fit all (§11.4). Above the FAB's place, 44 px targets. */
+  .g-zoom { position: absolute; z-index: 4; display: flex; flex-direction: column; gap: 1px; border-radius: 14px; overflow: hidden;
+            right: max(12px, env(safe-area-inset-right)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 68px);
+            background: var(--border); box-shadow: var(--shadow-2); }
+  .g-zoom button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; background: var(--surface);
+                   color: var(--text); cursor: pointer; }
+  .g-zoom button:active { background: var(--surface-2); }
+  .g-zoom svg { width: 20px; height: 20px; }
+  body.embed .g-zoom { bottom: max(12px, env(safe-area-inset-bottom)); }
+
+  /* Bars (§12.4 fill, §12.8). Position and width come from render.js. */
+  .g-bar { position: absolute; left: 0; top: 0; height: var(--bar-h); border-radius: var(--radius-bar);
+           background: var(--h-tint); box-shadow: inset 0 0 0 1px var(--h-stroke), var(--shadow-1);
+           contain: layout style; cursor: default; }
+  .g-fill { position: absolute; inset: 0; border-radius: inherit; background: var(--h-fill); transform-origin: 0 50%; transform: scaleX(0); }
+  .g-fill::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--bar-sheen); }
+  .g-lab, .g-lab-inv { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+                       overflow: hidden; white-space: nowrap; font-size: 12.5px; font-weight: 600; line-height: 1; }
+  .g-lab { color: var(--text); }
+  .g-lab-inv { color: var(--h-ink); clip-path: inset(0 calc(100% - var(--p, 0) * 100%) 0 0); pointer-events: none; }
+  .g-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .g-chip { margin-left: auto; flex: none; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; opacity: .85; }
+  .g-bar.nochip .g-chip { display: none; }
+  .g-bar.narrow .g-lab { left: 100%; right: auto; overflow: visible; padding-left: 6px; }
+  .g-bar.narrow .g-lab-inv { display: none; }
+  .g-bar.cls-done .g-lab { font-weight: 600; }
+  .g-bar.cls-dropped { opacity: .55; box-shadow: none; outline: 1px dashed var(--h-stroke); outline-offset: -1px; }
+  .g-bar.missing { background: repeating-linear-gradient(45deg, var(--faint) 0 1px, transparent 1px 6px), var(--surface-2);
+                   box-shadow: inset 0 0 0 1px var(--border); }
+  .g-bar.missing .g-fill, .g-bar.missing .g-lab-inv { display: none; }
+  .g-bar.missing .g-t { font-style: italic; color: var(--muted); }
+  .g-bar.ms { background: none; box-shadow: none; outline: none; }
+  .g-bar.ms .g-fill { transform: rotate(45deg) scale(.8) !important; border-radius: 3px; box-shadow: var(--shadow-1); }
+  .g-bar.ms .g-lab { left: 100%; right: auto; overflow: visible; padding-left: 8px; }
+  .g-bar.ms .g-lab-inv { display: none; }
+  .g-bar.flash { animation: g-flash .7s var(--ease) 3; }
+  @keyframes g-flash { 50% { box-shadow: var(--sel-ring); } }
+
+  /* Name column rows (§14.2). */
+  .g-name, .g-grp { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; }
+  .g-name { padding: 0 10px 0 14px; gap: 2px; flex-direction: column; align-items: stretch; justify-content: center; }
+  .g-rail { position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; border-radius: 0 3px 3px 0; background: var(--h-fill); }
+  .g-nt { font-size: 14px; font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .g-nm { font-size: 11.5px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          font-variant-numeric: tabular-nums; }
+  .g-name.missing .g-nt { font-style: italic; color: var(--muted); }
+  .g-name.short .g-nm { display: none; }
+  /* CJK titles have no word breaks to spare: in a short row (no meta line) they take two lines. */
+  html:lang(zh) .g-name.short .g-nt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+                                      font-size: 13px; line-height: 16px; overflow-wrap: anywhere; }
+  .g-name.flash { animation: g-nflash .7s var(--ease) 3; }
+  @keyframes g-nflash { 50% { background: var(--accent-soft); } }
+  .g-grp { padding: 0 8px 0 6px; gap: 5px; font-size: 13px; font-weight: 700;
+           color: var(--muted); background: var(--surface-2); border-top: 1px solid var(--border); cursor: pointer; }
+  /* The glyph is centred in its 14 px box, so the turn keeps it in place (G3 review round 1). */
+  .g-grp .g-chev { flex: none; width: 14px; height: 14px; line-height: 14px; text-align: center; transform-origin: 50% 50%; transition: transform var(--dur) var(--ease); }
+  .g-grp.collapsed .g-chev { transform: rotate(-90deg); }
+  .g-grp .g-gt { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Device feedback review: a CJK title that does not fit takes a second line where the header is tall enough (render.js .tall).
+     Latin titles keep one line with an ellipsis, so a single word is never split. */
+  .g-grp.tall .g-gt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+                      line-height: 14px; overflow-wrap: anywhere; }
+  /* The count is a compact badge, so the title keeps the width. */
+  .g-grp .g-gn { flex: none; font-variant-numeric: tabular-nums; font-weight: 650; font-size: 11px; line-height: 16px;
+                 min-width: 16px; padding: 0 4px; border-radius: 8px; text-align: center; background: var(--surface-3); }
+  .g-grp .g-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--h-fill); }
+  /* G3 (task-groups plan §8.2, §8.7, §8.8): the secondary text, the drop target, the flash after a drop out of sight. */
+  /* The hint gives way first, so a narrow column keeps the group title. */
+  .g-grp .g-gh { flex: 0 100 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                 font-size: 11px; font-weight: 500; color: var(--muted); }
+  .g-grp .g-gh:empty { display: none; }
+  /* A column too narrow for title and hint drops the hint (the count and the header's label still say it). */
+  .g-grp { container-type: inline-size; }
+  /* The query sees the content box: a 230 px column (render.HINT_MIN) less the 14 px padding. */
+  @container (max-width: 215.9px) { .g-grp .g-gh { display: none; } }
+  .g-root.mini .g-grp .g-gh { display: none; }
+  .g-grp.drop { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft);
+                background: color-mix(in srgb, var(--h-fill) 18%, var(--surface-2)); color: var(--text); }
+  .g-grp.drop .g-gn { background: var(--accent); color: var(--accent-ink); }
+  .g-grp.flash { animation: g-gflash .7s var(--ease) 3; }
+  @keyframes g-gflash { 50% { background: var(--accent-soft); } }
+  /* The No-group slot row of a REORDER drag (§8.1): a dashed outline with "No group". */
+  .g-slot { position: absolute; left: 0; right: 0; top: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 12.5px; font-weight: 600; color: var(--muted); pointer-events: none; }
+  .g-slot::before { content: ''; position: absolute; inset: 5px 8px; border: 1.5px dashed var(--faint); border-radius: 10px; }
+  .g-slot .g-st { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 12px; }
+  .g-slot.drop { color: var(--accent); }
+  .g-slot.drop::before { border-color: var(--accent); background: var(--accent-soft); }
+  .g-root.mini .g-slot .g-st { display: none; }
+
+  .g-empty { grid-column: 1 / span 2; grid-row: 2; align-self: center; justify-self: center; text-align: center;
+             color: var(--muted); padding: 24px; z-index: 3; pointer-events: none; }
+  .g-empty svg { display: block; margin: 0 auto 12px; width: 120px; height: 64px; }
+
+  /* ---------------------------------------------------------- home, chooser, states */
+  #home { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+          padding: 8px max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); }
+  #home h2 { margin: 18px 4px 8px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  #home .h-list { display: flex; flex-direction: column; border-radius: 14px; overflow: hidden; background: var(--surface);
+                  box-shadow: var(--shadow-1); border: 1px solid var(--border); }
+  #home .h-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 14px; border: 0; background: none;
+                 text-align: left; cursor: pointer; border-top: 1px solid var(--border); width: 100%; }
+  #home .h-row:first-child { border-top: 0; }
+  #home .h-row:active { background: var(--surface-2); }
+  #home .h-ico { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+                 background: var(--accent-soft); color: var(--accent); }
+  #home .h-ico svg { width: 20px; height: 20px; }
+  #home .h-main { flex: 1; min-width: 0; }
+  #home .h-t { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #home .h-m { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #home .h-mark { flex: none; font-size: 11.5px; font-weight: 650; color: var(--warn); }
+  #home .h-note { margin: 14px 4px; color: var(--muted); font-size: 14px; }
+  #home .h-more { justify-content: center; color: var(--accent); font-weight: 600; }
+  #home .h-state { margin: 20vh auto 0; max-width: 320px; text-align: center; color: var(--muted); }
+  #home .h-state strong { display: block; color: var(--text); font-size: 17px; margin-bottom: 6px; }
+  #home .h-state button { margin-top: 16px; min-height: 44px; padding: 0 20px; border-radius: 12px; border: 0;
+                          background: var(--accent); color: var(--accent-ink); font-weight: 650; cursor: pointer; }
+
+  /* G2 review: beside the FAB, not over it; above the legend when that shows (A.toast sets bottom). */
+  #toast { position: fixed; left: max(16px, env(safe-area-inset-left)); right: calc(max(16px, env(safe-area-inset-right)) + 72px);
+           bottom: calc(max(24px, env(safe-area-inset-bottom)) + 56px); transform: none; max-width: none;
+           display: flex; align-items: center; gap: 12px;
+           padding: 10px 16px; border-radius: 12px; background: var(--text); color: var(--bg); font-size: 14px; z-index: 20;
+           box-shadow: var(--shadow-2); }
+  #toast button { flex: none; min-height: 36px; border: 0; background: none; color: inherit; font-weight: 700; cursor: pointer;
+                  text-decoration: underline; }
+  #btnAdd { display: none; }
+  .fab { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 6;
+         width: 56px; height: 56px; border-radius: 18px; border: 0; background: var(--accent); color: var(--accent-ink);
+         display: grid; place-items: center; box-shadow: var(--shadow-2); cursor: pointer; }
+  .fab svg { width: 26px; height: 26px; }
+  .fab:disabled, .tb-btn:disabled { opacity: .38; cursor: default; }
+  .fab:disabled { box-shadow: none; }
+  body.embed .fab, body.embed .pill { display: none !important; }
+  #title.editable { cursor: pointer; }
+
+  /* ---------------------------------------------------------- selection and drags (§12.4, §13.3) */
+  .g-bar.sel { box-shadow: var(--sel-ring), var(--shadow-2); z-index: 2; }
+  .g-bar.ms.sel { box-shadow: none; }
+  .g-bar.ms.sel .g-fill { box-shadow: var(--sel-ring); }
+  .g-bar.lift { box-shadow: var(--sel-ring), var(--shadow-2); scale: 1.02; z-index: 3; }
+  .g-name.sel { background: var(--accent-soft); }
+  .g-name.lift { background: var(--surface); box-shadow: var(--shadow-2); z-index: 3; }
+  /* Drags feel magnetic: the lifted bar steps and shifted rows slide (§12.5 exemptions). */
+  .g-root.live .g-bar.lift, .g-root.live .g-name.lift { transition: transform var(--dur-fast) var(--ease), scale var(--dur-fast) var(--ease); }
+  .g-root.live .g-shift { transition: transform var(--dur-fast) var(--ease); }
+  .g-overlay, .g-handles { z-index: 4; }
+  .g-ghost { position: absolute; left: 0; top: 0; border: 1.5px dashed var(--accent); border-radius: var(--radius-bar); opacity: .75; }
+  .g-guide { position: absolute; left: 0; top: 0; width: 1px; background: var(--accent); opacity: .9; }
+  .g-bubble { position: absolute; left: 0; top: 0; translate: -50% -100%; padding: 6px 10px; border-radius: 10px; white-space: nowrap;
+              background: var(--text); color: var(--bg); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums;
+              box-shadow: var(--shadow-2); }
+  /* The delta in accent, a shade that reads on the bubble (dark on light, light on dark). */
+  .g-bubble .g-bd { margin-left: 6px; color: #9fb0ff; }
+  .g-bubble .g-bd:empty { display: none; }
+  :root[data-theme=dark] .g-bubble .g-bd { color: #3450e0; }
+  .g-handle { position: absolute; left: 0; top: 0; width: 44px; height: 44px; display: grid; place-items: center;
+              pointer-events: auto; cursor: ew-resize; animation: g-fade var(--dur) var(--ease); }
+  .g-handle span { width: 7px; height: 20px; border-radius: 4px; background: var(--surface);
+                   box-shadow: 0 0 0 1.5px var(--accent), var(--shadow-1); }
+  /* The grip sits on the bar's edge: inside handles at the outer side of
+     their box, outside handles at the inner side; the label steps clear. */
+  .g-handle.s span, .g-handle.e.out span { justify-self: start; margin-left: 3px; }
+  .g-handle.e span, .g-handle.s.out span { justify-self: end; margin-right: 3px; }
+  .g-bar.sel:not(.narrow):not(.ms) .g-lab, .g-bar.sel:not(.narrow):not(.ms) .g-lab-inv { padding: 0 16px; }
+  @keyframes g-fade { from { opacity: 0; } }
+
+  /* ---------------------------------------------------------- save pill and notice (§9.1.3) */
+  .pill { position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: max(16px, env(safe-area-inset-bottom)); z-index: 6;
+          min-height: 32px; max-width: calc(100vw - 110px); padding: 0 14px; border-radius: 16px; border: 1px solid var(--border);
+          background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; box-shadow: var(--shadow-1);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill.saved { opacity: .85; }
+  .pill.unsaved, .pill.not-saved { min-height: 44px; border-radius: 22px; color: var(--warn); border-color: currentColor; cursor: pointer; }
+  .pill.not-saved { color: var(--danger); }
+  .pill:disabled { cursor: default; }
+  /* Above the pill, clear of the FAB and zoom buttons, and above the sheet so it is never hidden. */
+  .notice { position: fixed; z-index: 16; left: max(12px, env(safe-area-inset-left)); right: calc(max(12px, env(safe-area-inset-right)) + 60px);
+            bottom: calc(max(16px, env(safe-area-inset-bottom)) + 56px); max-width: 520px;
+            display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px;
+            background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow-2); font-size: 14px; }
+  .notice .n-text { flex: 1; min-width: 0; }
+  body.sheet-side .notice { right: calc(min(380px, 46vw) + env(safe-area-inset-right) + 12px); }
+  .notice button { flex: none; min-height: 44px; padding: 0 16px; border-radius: 12px; border: 0; background: var(--accent);
+                   color: var(--accent-ink); font-weight: 650; cursor: pointer; }
+
+  /* ---------------------------------------------------------- sheet and side panel (§13.4) */
+  #scrim { position: fixed; inset: 0; z-index: 14; background: rgba(8,10,14,.32); }
+  .sheet { position: fixed; left: 0; right: 0; bottom: var(--kb); z-index: 15; display: flex; flex-direction: column;
+           max-height: calc(86vh - var(--kb)); background: var(--surface); color: var(--text);
+           border-radius: 18px 18px 0 0; box-shadow: var(--shadow-2); padding-bottom: env(safe-area-inset-bottom);
+           padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
+           animation: sh-up var(--dur) var(--ease); }
+  .sheet.peek { max-height: calc(240px + env(safe-area-inset-bottom)); }
+  .sheet.full { height: calc(86vh - var(--kb)); }
+  .sheet.side { top: 0; bottom: 0; left: auto; width: calc(min(380px, 46vw) + env(safe-area-inset-right)); height: auto; max-height: none;
+                border-radius: 0; border-left: 1px solid var(--border); padding-top: 8px; padding-left: 0;
+                animation-name: sh-left; }
+  .sheet.side .sheet-grab { display: none; }
+  @keyframes sh-up { from { transform: translateY(100%); } }
+  @keyframes sh-left { from { transform: translateX(100%); } }
+  .sheet-grab { flex: none; height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+  .sheet-grab span { width: 36px; height: 5px; border-radius: 3px; background: var(--surface-3); }
+  .sheet-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 0 6px 4px 16px; }
+  .sh-dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--h-fill); }
+  .sh-title { flex: 1; min-width: 0; font-size: 17px; font-weight: 680; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none; }
+  .sh-close { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: none; cursor: pointer; }
+  .sh-close svg { width: 20px; height: 20px; }
+  .sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+                padding: 4px 16px 16px; font-size: 15px; }
+  .sh-dates { display: flex; gap: 10px; }
+  .sh-field { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .sh-flab, .sh-lab { font-size: 12.5px; font-weight: 650; color: var(--muted); }
+  .sh-lab { margin: 14px 0 6px; }
+  .sh-field input, .sh-input { min-height: 44px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border);
+                               background: var(--surface-2); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; width: 100%; }
+  .sh-dur { margin-top: 8px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .sh-nd { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; margin-top: 2px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .sh-link { min-height: 44px; min-width: 44px; padding: 0 4px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+  .sh-nthint { margin: 6px 0 0; }
+  .sh-row { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-top: 8px; gap: 12px; }
+  .sh-switch input { width: 44px; height: 26px; accent-color: var(--accent); }
+  .sh-swatches { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
+  .sw { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
+        display: grid; place-items: center; cursor: pointer; font-size: 12px; font-weight: 650; color: var(--muted); }
+  .sw span { width: 24px; height: 24px; border-radius: 50%; background: var(--h-fill); }
+  .sw[aria-checked=true] { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+  .sw:disabled { opacity: .45; cursor: default; }
+  .sh-prog { display: flex; align-items: center; gap: 10px; }
+  .sh-track { flex: 1; height: 8px; border-radius: 4px; background: var(--h-tint); overflow: hidden; box-shadow: inset 0 0 0 1px var(--h-stroke); }
+  .sh-fill { height: 100%; background: var(--h-fill); transform-origin: 0 50%; transform: scaleX(0); }
+  .sh-ptext { flex: none; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sh-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .sh-btn { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
+            font-weight: 650; cursor: pointer; }
+  .sh-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .sh-btn.danger { color: var(--danger); }
+  .sh-menu { display: flex; flex-direction: column; }
+  .sh-item { display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 4px; border: 0;
+             border-top: 1px solid var(--border); background: none; text-align: left; cursor: pointer; font-size: 15px; }
+  .sh-item:first-child { border-top: 0; }
+  .sh-item.danger { color: var(--danger); }
+  .sh-item:disabled { opacity: .4; cursor: default; }
+  .sh-ih { color: var(--muted); font-size: 13px; }
+  .sh-text { margin: 4px 0 10px; color: var(--muted); font-size: 14px; }
+  .sh-ff { margin-top: 12px; }
+  .sh-ff .sh-flab { margin-bottom: 4px; color: var(--text); font-size: 14px; }
+  .sh-detail { margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+  .sh-seg { display: inline-flex; }
+  .sh-seg button { min-height: 36px; padding: 0 12px; font-size: 13px; }
+  .sh-code { margin: 0; max-height: 40vh; overflow: auto; padding: 10px; border-radius: 10px; background: var(--surface-2);
+             border: 1px solid var(--border); font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+  .sheet.ro .sh-field input { opacity: .6; }
+  /* M7: the completion list, the two-step remove, text areas, home and chooser actions. */
+  .sh-items { margin-top: 6px; display: flex; flex-direction: column; }
+  .sh-it { display: flex; align-items: center; min-height: 44px; border-top: 1px solid var(--border); }
+  .sh-it:first-child { border-top: 0; }
+  .sh-itl { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+  .sh-itl input { flex: none; width: 22px; height: 22px; margin: 0 0 0 2px; accent-color: var(--h-fill, var(--accent)); }
+  .sh-itx { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-it.done .sh-itx { color: var(--muted); }
+  .sh-it.k-child .sh-itx::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%;
+                                   background: var(--surface-3); vertical-align: 1px; }
+  .sh-it.k-child.done .sh-itx::before { background: var(--h-fill, var(--accent)); }
+  .sh-itopen { flex: none; width: 44px; height: 44px; border: 0; border-radius: 12px; background: none; color: var(--muted);
+               font-size: 22px; line-height: 1; cursor: pointer; }
+  .sh-inote { padding: 10px 2px; color: var(--muted); font-size: 13px; }
+  .sh-btn.danger.armed { background: var(--danger); color: var(--accent-ink); border-color: transparent; }
+  .sh-ta { width: 100%; min-height: 96px; padding: 8px 10px; resize: vertical; font: inherit; line-height: 1.4; }
+  .sh-ff-date .sh-input { width: 100%; }
+  /* G0: the task sheet's Title / Note title field and its [Rename] button. */
+  .sh-name { margin: 0 0 12px; }
+  .sh-name .sh-flab { display: block; }
+  .sh-nrow { display: flex; gap: 8px; align-items: center; }
+  .sh-nrow .sh-input { flex: 1; min-width: 0; }
+  .sh-nrow .sh-btn { flex: none; }
+  .sh-name .sh-detail { margin: 4px 0 0; }
+  .sh-name input[aria-busy=true] { opacity: .6; }
+  .sh-name input:read-only { color: var(--muted); }
+  .sh-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .sh-lhint { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+  /* The create sheet's group chips: whole names, wrapped, 44 px targets. */
+  .sh-ff[data-field="group"] .sh-seg { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; background: none; }
+  .sh-ff[data-field="group"] .sh-seg button { flex: none; width: auto; max-width: 100%; min-height: 44px; padding: 0 14px;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-ff[data-field="group"] .sh-seg button[aria-pressed=true] { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+  /* G3 (task-groups plan §8.3 to §8.6): the task sheet's Group row, the group sheet, More > Groups. */
+  .sh-gchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sh-chip { flex: none; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-height: 44px; padding: 0 14px;
+             border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 14px;
+             cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-chip .sh-dot { width: 10px; height: 10px; }
+  .sh-chip[aria-checked=true] { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
+  .sh-chip.sh-new { margin-top: 6px; color: var(--accent); background: none; border-style: dashed; }
+  .sh-chip:disabled { opacity: .5; cursor: default; }
+  .sh-gsw .sw.auto { width: auto; min-width: 44px; padding: 0 10px; }
+  .sh-gerr { margin: 4px 0 0; color: var(--danger); font-size: 13px; }
+  .sh-gerr:empty { display: none; }
+  .sh-gacts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .sh-gacts .sh-btn:disabled { opacity: .45; cursor: default; }
+  .sh-glist { display: flex; flex-direction: column; }
+  .sh-gli { display: flex; align-items: center; gap: 4px; border-top: 1px solid var(--border); }
+  .sh-gli:first-child { border-top: 0; }
+  .sh-gli .sh-trow { flex: 1; min-width: 0; min-height: 52px; justify-content: center; }
+  .sh-gli .sh-tm { padding-left: 20px; }
+  .sh-garrow { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: none;
+               color: var(--text); font-size: 18px; cursor: pointer; }
+  .sh-garrow:disabled { opacity: .3; cursor: default; }
+  .sh-gadd { margin-top: 12px; }
+  #home .h-new { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; margin-top: 8px;
+                 border: 0; border-radius: 14px; background: var(--accent); color: var(--accent-ink); font-size: 15px; font-weight: 650; cursor: pointer; }
+  #home .h-acts { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 4px 8px; }
+  #home .h-acts button { min-height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface);
+                         color: var(--text); font-weight: 600; cursor: pointer; }
+  #home .h-acts button.danger { color: var(--danger); }
+  @media (orientation: landscape) and (max-height: 500px) {
+    body.mode-chart:not(.embed) #btnAdd { display: grid !important; }
+    body.mode-chart .fab { display: none !important; }
+  }
+
+  /* ---------------------------------------------------------- M8: completion styles (§12.4) */
+  .g-seg, .g-dots { display: none; }
+  /* Segments: one cell per sub-item, 2 px gaps (a mask), done in fill, open in tint; late open cells are
+     --warn-soft with a 2 px --warn stripe on top (the second image layer, M8 review). */
+  .g-bar.pm-segments { background: none; box-shadow: var(--shadow-1); }
+  .g-bar.pm-segments .g-fill, .g-bar.pm-segments .g-lab-inv { display: none; }
+  .g-bar.pm-segments .g-seg { display: block; position: absolute; inset: 0; border-radius: inherit; background-color: var(--h-tint);
+                              box-shadow: inset 0 0 0 1px var(--h-stroke); }
+  .g-bar.pm-segments .g-seg.late { background-color: var(--warn-soft); background-size: 100% 100%, 100% 2px; background-repeat: no-repeat; }
+  /* The label reads over mixed cells on a small backing. */
+  .g-bar.pm-segments:not(.narrow) .g-t, .g-bar.pm-segments:not(.narrow):not(.nochip) .g-chip { padding: 1px 5px; border-radius: 5px; background: var(--seg-lab); }
+  /* Dots: the bar in fill at 85%, the label in ink, a row of 6 px dots under it. */
+  .g-bar.pm-dots .g-fill { transform: none !important; opacity: .85; }
+  .g-bar.pm-dots:not(.narrow) .g-lab { visibility: hidden; }
+  /* One element: the dots are its background layers (layout.dotsStyle), "+n" its text. */
+  .g-bar.pm-dots .g-dots { display: block; position: absolute; left: 8px; bottom: 3px; height: 6px; --dot-on: var(--h-ink);
+                           background-size: 6px 6px; background-repeat: no-repeat; pointer-events: none; white-space: nowrap;
+                           font-size: 9.5px; font-weight: 700; line-height: 6px; color: var(--h-ink); font-variant-numeric: tabular-nums; }
+  .g-bar.pm-dots:not(.dots-under):not(.narrow) .g-lab, .g-bar.pm-dots:not(.dots-under):not(.narrow) .g-lab-inv { align-items: flex-start; padding-top: 3px; }
+  /* Compact bars (under 24 px) and outside labels: the dots go under the bar. */
+  .g-bar.pm-dots.dots-under .g-dots, .g-bar.pm-dots.narrow .g-dots { top: calc(100% + 2px); bottom: auto; left: 2px; --dot-on: var(--h-fill); color: var(--muted); }
+
+  /* ---------------------------------------------------------- M8: states (§12.6) */
+  .g-bar.ghost { background: none; box-shadow: none; outline: 1.5px dashed var(--faint); outline-offset: -1.5px; cursor: pointer; }
+  .g-bar.ghost .g-fill, .g-bar.ghost .g-lab-inv { display: none; }
+  .g-bar.ghost .g-t { color: var(--muted); }
+  .g-bar.ghost:not(.narrow) .g-lab { padding: 0 4px; justify-content: center; }
+  .g-bar.loading .g-fill, .g-bar.loading .g-lab-inv { display: none; }
+  .g-bar.loading::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+                          background: linear-gradient(90deg, transparent, var(--g-shimmer), transparent) no-repeat; background-size: 50% 100%;
+                          animation: g-shimmer 1.4s linear 8; }
+  /* Counts that could not be read (a failed resolve): a static track, no shimmer (M8 review). */
+  .g-bar.unknown .g-fill, .g-bar.unknown .g-lab-inv { display: none; }
+  @keyframes g-shimmer { from { background-position: -100% 0; } to { background-position: 200% 0; } }
+  /* The empty state sits on its own backing, above the today line (M8 review). */
+  .g-empty { background: var(--g-bg); border-radius: 16px; }
+  .g-empty .e-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; pointer-events: auto; }
+  .g-empty button, .g-allc button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--border);
+                                    background: var(--surface); color: var(--text); font-weight: 650; cursor: pointer; }
+  .g-empty button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .g-allc { grid-column: 2; grid-row: 2; align-self: center; justify-self: center; z-index: 3; display: flex; flex-direction: column;
+            align-items: center; gap: 10px; padding: 16px; color: var(--muted); text-align: center; }
+  .g-skel { grid-column: 1 / span 2; grid-row: 2; z-index: 3; background: var(--g-bg); overflow: hidden; pointer-events: none; padding-top: 6px; }
+  .g-skel .sk-row { display: flex; align-items: center; height: 44px; }
+  .g-skel .sk-name { flex: none; width: calc(var(--name-w) - 40px); height: 12px; margin: 0 26px 0 14px; border-radius: 6px; }
+  .g-skel .sk-bar { height: 22px; border-radius: 7px; }
+  .g-skel .sk-row:nth-child(1) .sk-bar { width: 38%; margin-left: 4%; }
+  .g-skel .sk-row:nth-child(2) .sk-bar { width: 30%; margin-left: 18%; }
+  .g-skel .sk-row:nth-child(3) .sk-bar { width: 44%; margin-left: 10%; }
+  .g-skel .sk-row:nth-child(4) .sk-bar { width: 22%; margin-left: 34%; }
+  .g-skel .sk-row:nth-child(5) .sk-bar { width: 36%; margin-left: 26%; }
+  .g-skel .sk-row:nth-child(6) .sk-bar { width: 18%; margin-left: 48%; }
+  .sk { background: var(--surface-3) linear-gradient(90deg, transparent, var(--g-shimmer), transparent) no-repeat; background-size: 50% 100%;
+        animation: g-shimmer 1.4s linear infinite; }
+
+  /* ---------------------------------------------------------- M8: name column (§14.2) */
+  .g-divider { cursor: col-resize; touch-action: none; position: relative; }
+  /* Device feedback round 1: a visible grip, and a collapse toggle in the corner. */
+  .g-divider::after { content: ''; position: absolute; left: 50%; top: 50%; width: 4px; height: 36px; border-radius: 2px;
+                      transform: translate(-50%, -50%); background: var(--g-line-strong); box-shadow: 0 0 0 2px var(--surface); }
+  /* 36 px drawn; ::after makes the target 44x44 (4 px each side, and down past a 40 px landscape header). */
+  .g-ntog::after { content: ''; position: absolute; left: -4px; right: -4px; top: 0; height: max(44px, 100%); }
+  .g-ntog { position: relative; flex: none; width: 36px; align-self: stretch; display: grid; place-items: center; border: 0; border-radius: 10px;
+            background: none; color: var(--muted); cursor: pointer; }
+  .g-ntog:active { background: var(--surface-2); }
+  .g-ntog svg { width: 18px; height: 18px; transition: transform var(--dur) var(--ease); }
+  .g-root.mini .g-ntog svg { transform: rotate(180deg); }
+  .g-root.mini .g-corner { justify-content: center; padding: 0; }
+  .g-ring { display: none; }
+  .g-root.mini .g-nt, .g-root.mini .g-nm, .g-root.mini .g-grp .g-gt, .g-root.mini .g-grp .g-gn { display: none; }
+  .g-root.mini .g-name { align-items: center; padding: 0; }
+  /* D/W/M does not fit the 56 px corner; the zoom buttons and keys remain. */
+  .g-root.mini .g-corner .seg { display: none; }
+  .g-root.mini .g-grp { justify-content: center; padding: 0; }
+  .g-root.mini .g-ring { display: block; position: relative; width: 22px; height: 22px; border-radius: 50%;
+                         background: conic-gradient(var(--h-fill) calc(var(--p, 0) * 360deg), var(--surface-3) 0); }
+  /* The ring's hole, and the colour dot inside it. */
+  .g-root.mini .g-ring::after, .g-root.mini .g-ring::before { content: ''; position: absolute; border-radius: 50%; }
+  .g-root.mini .g-ring::after { inset: 4px; background: var(--surface); }
+  .g-root.mini .g-ring::before { inset: 7px; background: var(--h-fill); z-index: 1; }
+
+  /* ---------------------------------------------------------- M8: legend (§12.7) */
+  #legend { position: fixed; z-index: 7; left: max(12px, env(safe-area-inset-left)); bottom: calc(max(16px, env(safe-area-inset-bottom)) + 52px);
+            width: min(300px, calc(100vw - 100px)); padding: 0 4px 8px 12px; border-radius: 14px; background: var(--surface); color: var(--text);
+            border: 1px solid var(--border); box-shadow: var(--shadow-2); font-size: 12.5px; }
+  #legend .lg-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 13px; }
+  #legend .lg-close { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 12px; background: none;
+                      color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; }
+  #legend .lg-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8px; padding-right: 8px; }
+  #legend .lg-row { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 20px; }
+  #legend .lg-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #legend .lg-sw { flex: none; width: 14px; height: 9px; border-radius: 3px; background: var(--h-fill); }
+  /* To do: a tint track with its stroke; no sub-items: tint only; dropped: dashed and faded (M8 review). */
+  #legend .lg-sw.k-todo { background: var(--h-tint); box-shadow: inset 0 0 0 1px var(--h-fill); }
+  #legend .lg-sw.k-none { background: var(--h-tint); }
+  #legend .lg-sw.k-dropped { background: var(--h-tint); opacity: .55; outline: 1px dashed var(--h-fill); outline-offset: -1px; }
+  /* Cues in group and task colouring: overdue cells, dropped, missing. */
+  #legend .lg-sw.k-cue-late { background: linear-gradient(var(--warn), var(--warn)) top / 100% 2px no-repeat, var(--warn-soft); }
+  #legend .lg-sw.k-cue-dropped { background: none; opacity: .7; outline: 1px dashed var(--muted); outline-offset: -1px; }
+  #legend .lg-sw.k-cue-missing { background: repeating-linear-gradient(45deg, var(--faint) 0 1px, transparent 1px 4px), var(--surface-2); }
+  #legend .lg-sw.k-missing { background: repeating-linear-gradient(45deg, var(--faint) 0 1px, transparent 1px 4px), var(--surface-2); }
+  #legend .lg-sw.k-today { width: 2px; height: 13px; margin: 0 6px; border-radius: 1px; background: var(--today); }
+  #legend .lg-sw.k-weekend { background: var(--g-weekend); box-shadow: inset 0 0 0 1px var(--border); }
+  #legend .lg-sw.k-milestone { width: 8px; height: 8px; margin: 0 3px; border-radius: 2px; transform: rotate(45deg); background: var(--muted); }
+  #legend .lg-foot { margin-top: 6px; padding-right: 8px; color: var(--muted); font-size: 11.5px; }
+  body.sheet-open #legend, body:not(.mode-chart) #legend { display: none !important; }
+  @media (orientation: landscape) and (max-height: 419px) { #legend { display: none !important; } }
+
+  /* ---------------------------------------------------------- M8: settings and display sheets (§13.5) */
+  .sh-days { display: flex; gap: 4px; }
+  .sh-days button { flex: 1; min-width: 0; height: 44px; padding: 0; border-radius: 10px; border: 1px solid var(--border);
+                    background: var(--surface-2); color: var(--muted); font-weight: 650; font-size: 13px; cursor: pointer; }
+  .sh-days button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .sh-dlist { display: flex; flex-direction: column; gap: 6px; }
+  .sh-drow { display: flex; gap: 6px; align-items: center; }
+  .sh-drow .sh-input { flex: 1; }
+  .sh-drow button, .sh-dadd { flex: none; min-height: 44px; min-width: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border);
+                              background: var(--surface-2); color: var(--text); cursor: pointer; font-weight: 650; }
+  .sh-dadd { align-self: flex-start; }
+  .sh-ff button:disabled, .sh-ff input:disabled { opacity: .5; cursor: default; }
+  .sh-seg button .pv { display: block; width: 30px; height: 8px; margin: 2px auto 3px; border-radius: 3px; }
+  .sh-seg button:has(.pv) { min-height: 44px; }
+  .pv-fill { background: linear-gradient(90deg, var(--accent) 60%, var(--accent-soft) 60%); }
+  .pv-segments { background: repeating-linear-gradient(90deg, var(--accent) 0 5px, transparent 5px 7px); }
+  .pv-dots { background: radial-gradient(circle, var(--accent) 2.5px, transparent 3px) 0 50% / 7px 8px repeat-x; }
+
+  /* ---------------------------------------------------------- M8: lite and reduced motion (§11.6, §12.5) */
+  body.lite .g-fill::after { display: none; }
+  body.lite .g-bar.pm-fill:not(.sel):not(.lift):not(.ms):not(.missing):not(.ghost), body.lite .g-bar.pm-dots:not(.sel):not(.lift) { box-shadow: inset 0 0 0 1px var(--h-stroke); }
+  body.lite .g-bar.pm-segments:not(.sel):not(.lift), body.lite .g-bar.ms .g-fill { box-shadow: none; }
+  body.lite .g-lab-inv { display: none; }
+  /* Without the inverted copy the label sits on the same backing as over segments (M8 review). */
+  body.lite .g-bar.pm-dots:not(.narrow) .g-lab { visibility: visible; }
+  body.lite .g-bar:not(.narrow):not(.ms):not(.ghost) .g-t, body.lite .g-bar:not(.narrow):not(.ms):not(.ghost):not(.nochip) .g-chip {
+    padding: 1px 5px; border-radius: 5px; background: var(--seg-lab); color: var(--text); }
+  :root.reduce-motion { --dur-fast: .01ms; --dur: .01ms; }
+  :root.reduce-motion .g-bar.flash, :root.reduce-motion .g-name.flash, :root.reduce-motion .g-grp.flash, :root.reduce-motion .sk,
+  :root.reduce-motion .g-bar.loading::after, :root.reduce-motion .sheet, :root.reduce-motion .g-handle { animation: none; }
+  :root.reduce-motion .g-bar.lift { scale: none; }
+  /* M9: reduced motion covers everything (zero, not a tiny duration: a
+     non-zero one would start a transition on every style change); a flash
+     is a still highlight instead. */
+  :root.reduce-motion *, :root.reduce-motion *::before, :root.reduce-motion *::after {
+    animation: none !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+  :root.reduce-motion .g-bar.flash { box-shadow: var(--sel-ring); }
+  :root.reduce-motion .g-name.flash { background: var(--accent-soft); }
+
+  /* ---------------------------------------------------------- M9: Task list view, keyboard focus (§15.2) */
+  .sh-lhead { margin: 16px 0 2px; }
+  .sh-tlist { display: flex; flex-direction: column; }
+  .sh-tli { border-top: 1px solid var(--border); }
+  .sh-tli:first-child { border-top: 0; }
+  .sh-trow { display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 56px; padding: 8px 4px; border: 0; border-radius: 10px;
+             background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+  .sh-trow:active { background: var(--surface-2); }
+  .sh-tr1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .sh-tt { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sh-tst { flex: none; padding: 2px 8px; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 650; }
+  .sh-tm { padding-left: 20px; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  /* The row is a button, so its parts are spans: give the bar block layout. */
+  .sh-trow .sh-prog { display: flex; padding-left: 20px; }
+  .sh-trow .sh-track, .sh-trow .sh-fill { display: block; }
+  .sh-trow .sh-track { height: 6px; }
+  .g-name:focus-visible, .g-grp:focus-visible, .g-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  /* Portrait phones: the name column is narrow, so group headers drop the dot (the rows' rails carry colour). */
+  @media (orientation: portrait) and (max-width: 600px) {
+    .g-grp .g-dot { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :root { --dur-fast: .01ms; --dur: .01ms; }
+    .g-bar.flash, .g-name.flash, .g-grp.flash, .sk, .g-bar.loading::after, .sheet, .g-handle { animation: none; }
+    .g-bar.lift { scale: none; }
+    *, *::before, *::after { animation: none !important; transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+    .g-bar.flash { box-shadow: var(--sel-ring); }
+    .g-name.flash { background: var(--accent-soft); }
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    :root { --top-h: 44px; }
+    /* Landscape phone: one 44 px row, so it covers one row of bars, not half the body. */
+    .g-zoom { flex-direction: row; bottom: max(10px, env(safe-area-inset-bottom)); }
+    #topbar { padding-top: 0; padding-bottom: 0; }
+    /* M9 review: the pill sits right of the name column, not over its rows. */
+    body.mode-chart .pill { left: calc(var(--g-name-w, 0px) + max(12px, env(safe-area-inset-left))); }
+  }
+</style>
+</head>
+<body class="standalone">
+<div id="app">
+  <header id="topbar">
+    <button id="btnHome" class="tb-btn" type="button" data-i18n-label="Charts" aria-label="Charts">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <div id="title" role="heading" aria-level="1">Gantt</div>
+    <button id="btnUndo" class="tb-btn" type="button" hidden disabled data-i18n-label="Undo" aria-label="Undo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg>
+    </button>
+    <button id="btnRedo" class="tb-btn" type="button" hidden disabled data-i18n-label="Redo" aria-label="Redo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg>
+    </button>
+    <button id="btnToday" class="tb-btn" type="button" data-i18n-label="Today" aria-label="Today">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <button id="btnAdd" class="tb-btn" type="button" hidden data-i18n-label="Add" aria-label="Add">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button id="btnMore" class="tb-btn" type="button" hidden data-i18n-label="More" aria-label="More">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+    </button>
+  </header>
+  <main id="gantt" class="g-root" hidden>
+    <div class="g-corner">
+      <div class="seg" id="zoomSeg" role="group" data-i18n-label="Zoom level" aria-label="Zoom level">
+        <button type="button" data-zoom="day" data-i18n="D" data-i18n-label="Day" aria-label="Day">D</button>
+        <button type="button" data-zoom="week" data-i18n="W" data-i18n-label="Week" aria-label="Week">W</button>
+        <button type="button" data-zoom="month" data-i18n="M" data-i18n-label="Month" aria-label="Month">M</button>
+      </div>
+      <button class="g-ntog" type="button" data-i18n-label="Collapse task names" aria-label="Collapse task names" aria-expanded="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 7l-5 5 5 5"/><path d="M19 5v14"/></svg>
+      </button>
+    </div>
+    <canvas class="g-hdr-cv" aria-hidden="true"></canvas>
+    <div class="g-names" role="group" data-i18n-label="Tasks" aria-label="Tasks"><div class="g-names-inner"></div></div>
+    <div class="g-divider" role="separator" aria-orientation="vertical" data-i18n-label="Name column width" aria-label="Name column width"></div>
+    <div class="g-body">
+      <canvas class="g-grid-cv" aria-hidden="true"></canvas>
+      <div class="g-bars"></div> <div class="g-overlay"></div> <div class="g-handles"></div>
+    </div>
+    <div id="empty" class="g-empty" hidden>
+      <svg viewBox="0 0 120 64" aria-hidden="true"><rect x="8" y="8" width="54" height="12" rx="6" fill="var(--surface-3)"/><rect x="30" y="26" width="72" height="12" rx="6" fill="var(--surface-3)"/><rect x="18" y="44" width="40" height="12" rx="6" fill="var(--surface-3)"/></svg>
+      <div data-i18n="No tasks on this chart yet">No tasks on this chart yet</div>
+      <div class="e-acts">
+        <button type="button" class="primary" data-action="empty-add" data-i18n="Add notes">Add notes</button>
+        <button type="button" data-action="empty-create" data-i18n="Create a task note">Create a task note</button>
+      </div>
+    </div>
+    <div class="g-allc" hidden>
+      <div data-i18n="All groups are collapsed">All groups are collapsed</div>
+      <button type="button" data-action="expand-all" data-i18n="Expand all">Expand all</button>
+    </div>
+    <div class="g-skel" hidden aria-hidden="true">
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+      <div class="sk-row"><span class="sk sk-name"></span><span class="sk sk-bar"></span></div>
+    </div>
+    <div class="g-zoom" role="group" data-i18n-label="Zoom" aria-label="Zoom">
+      <button id="btnZoomIn" type="button" data-i18n-label="Zoom in" aria-label="Zoom in">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button id="btnZoomOut" type="button" data-i18n-label="Zoom out" aria-label="Zoom out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>
+      </button>
+      <button id="btnFit" type="button" data-i18n-label="Fit all" aria-label="Fit all">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/></svg>
+      </button>
+    </div>
+  </main>
+  <button id="fab" class="fab" type="button" hidden data-i18n-label="Add" aria-label="Add">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+  <button id="pill" class="pill" type="button" hidden aria-live="polite"></button>
+  <div id="legend" role="note" data-i18n-label="Legend" aria-label="Legend" hidden></div> <div id="banner" role="status" hidden></div> <div id="toast" role="status" hidden></div> <div id="scrim" hidden></div>
+  <div id="notice" class="notice" role="status" hidden></div>
+  <section id="sheet" role="dialog" hidden></section>
+  <section id="home" hidden></section>
+</div>
+<script src="src/i18n.js"></script>
+<script src="src/dates.js"></script>
+<script src="src/model.js"></script>
+<script src="src/undo.js"></script>
+<script src="src/block.js"></script>
+<script src="src/md.js"></script>
+<script src="src/host.js"></script>
+<script src="src/store.js"></script>
+<script src="src/scale.js"></script>
+<script src="src/layout.js"></script>
+<script src="src/theme.js"></script>
+<script src="src/render.js"></script>
+<script src="src/gestures.js"></script>
+<script src="src/sheet.js"></script>
+<script src="src/exporter.js"></script>
+<script src="src/app.js"></script>
+<script>GT.app.boot();</script>
+</body>
+</html>

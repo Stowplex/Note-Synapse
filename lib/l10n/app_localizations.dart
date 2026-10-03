@@ -9116,6 +9116,42 @@ abstract class AppLocalizations {
   /// **'Set {field}: {value}'**
   String approvalSetField(String field, String value);
 
+  /// No description provided for @approvalAddSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Sub-Notes: {value}'**
+  String approvalAddSubNotes(String value);
+
+  /// No description provided for @approvalRemoveSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {count} Sub-Note(s)'**
+  String approvalRemoveSubNotes(int count);
+
+  /// No description provided for @approvalCompleteSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark {count} Sub-Note(s) Done'**
+  String approvalCompleteSubNotes(int count);
+
+  /// No description provided for @approvalUncompleteSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark {count} Sub-Note(s) Not Done'**
+  String approvalUncompleteSubNotes(int count);
+
+  /// No description provided for @approvalRenameSubNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename Sub-Notes To: {value}'**
+  String approvalRenameSubNotes(String value);
+
+  /// No description provided for @approvalEditSubNoteContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Content of {count} Sub-Note(s)'**
+  String approvalEditSubNoteContent(int count);
+
   /// No description provided for @approvalDetailsTruncated.
   ///
   /// In en, this message translates to:

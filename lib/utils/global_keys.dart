@@ -22,9 +22,18 @@ class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
   /// The route currently on top of the stack, as far as observation goes.
   Route<dynamic>? get topRoute => _topRoute;
 
+  int _pagePushes = 0;
+
+  /// How many [PageRoute]s have been pushed (or swapped in by a replace) so
+  /// far. Counted before subscribers are notified, so a `RouteAware` can tell
+  /// whether a full screen was opened anywhere above it while it was covered,
+  /// not only directly above it.
+  int get pagePushes => _pagePushes;
+
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _topRoute = route;
+    if (route is PageRoute) _pagePushes++;
     super.didPush(route, previousRoute);
   }
 
@@ -54,6 +63,7 @@ class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     if (identical(_topRoute, oldRoute)) _topRoute = newRoute;
+    if (newRoute is PageRoute) _pagePushes++;
     super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
   }
 
@@ -62,6 +72,7 @@ class AppRouteObserver extends RouteObserver<ModalRoute<void>> {
   @visibleForTesting
   void resetForTesting() {
     _topRoute = null;
+    _pagePushes = 0;
   }
 }
 

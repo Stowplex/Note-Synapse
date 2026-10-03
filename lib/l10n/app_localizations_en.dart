@@ -5290,6 +5290,36 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String approvalAddSubNotes(String value) {
+    return 'Add Sub-Notes: $value';
+  }
+
+  @override
+  String approvalRemoveSubNotes(int count) {
+    return 'Remove $count Sub-Note(s)';
+  }
+
+  @override
+  String approvalCompleteSubNotes(int count) {
+    return 'Mark $count Sub-Note(s) Done';
+  }
+
+  @override
+  String approvalUncompleteSubNotes(int count) {
+    return 'Mark $count Sub-Note(s) Not Done';
+  }
+
+  @override
+  String approvalRenameSubNotes(String value) {
+    return 'Rename Sub-Notes To: $value';
+  }
+
+  @override
+  String approvalEditSubNoteContent(int count) {
+    return 'Edit Content of $count Sub-Note(s)';
+  }
+
+  @override
   String get approvalDetailsTruncated => '… (truncated for display)';
 
   @override

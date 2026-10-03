@@ -44,8 +44,6 @@
   var BOARD = BB.board;
   var N = (BB.notes = {});
 
-  N.LINES = 3;          // how many stripped lines make a face
-  N.CHARS = 220;        // and how much of them survives
   N.SEP = ' · ';
 
   N.UNTITLED = '(untitled)';
@@ -93,16 +91,18 @@
    * excerpt(markdown, opts) -> a card face
    *   opts.title   the note's own title; a first line that only repeats it is
    *                dropped, because the card already shows it above.
-   *   opts.lines   how many stripped lines to keep (default 3)
-   *   opts.chars   how long the result may be (default 220)
+   *   opts.lines   optional limit on stripped source lines
+   *   opts.chars   optional limit on the resulting text
    *
-   * The input is normally the SQL-truncated first 400 characters, so it can end
-   * mid-word and mid-fence. Neither is treated as an error.
+   * Keep the readable text from the bounded SQL preview by default. The card
+   * and export wrap it to their current width and clamp the visible lines;
+   * cutting characters here would leave a widened card with nothing to reveal.
+   * The input can end mid-word or mid-fence. Neither is treated as an error.
    */
   N.excerpt = function (md, opts) {
     opts = opts || {};
-    var want = opts.lines || N.LINES;
-    var cap = opts.chars || N.CHARS;
+    var want = opts.lines || Infinity;
+    var cap = opts.chars || Infinity;
     var title = stripInline(String(opts.title == null ? '' : opts.title)).toLowerCase();
 
     var src = String(md == null ? '' : md);

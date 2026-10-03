@@ -710,6 +710,8 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
           final text = value.toString();
           buffer.writeln('• ${_l10n?.approvalTags(text) ?? 'Tags: $text'}');
         }
+      } else if (key == 'subnote' && value is Map) {
+        _formatSubnoteModification(buffer, value);
       } else if (key == 'type') {
         final text = value.toString();
         buffer.writeln(
@@ -739,6 +741,60 @@ class _ApprovalDialogState extends State<ApprovalDialog> {
 
     if (buffer.isEmpty) return modification.toString();
     return buffer.toString().trim();
+  }
+
+  /// Renders `subnote: {added, removed, updated}` as readable lines instead of
+  /// a raw map. Removed and updated entries carry only ids, so they are
+  /// counted; added and renamed entries are listed by name.
+  void _formatSubnoteModification(StringBuffer buffer, Map value) {
+    List<Map> entries(dynamic list) =>
+        list is List ? list.whereType<Map>().toList() : const [];
+    final added = entries(
+      value['added'],
+    ).map((s) => (s['name'] ?? s['title'] ?? '').toString()).toList();
+    if (added.isNotEmpty) {
+      final text = added.join(', ');
+      buffer.writeln(
+        '• ${_l10n?.approvalAddSubNotes(text) ?? 'Add Sub-Notes: $text'}',
+      );
+    }
+    final removed = value['removed'];
+    if (removed is List && removed.isNotEmpty) {
+      final n = removed.length;
+      buffer.writeln(
+        '• ${_l10n?.approvalRemoveSubNotes(n) ?? 'Remove $n Sub-Note(s)'}',
+      );
+    }
+    final updated = entries(value['updated']);
+    final done = updated.where((s) => s['isCompleted'] == true).length;
+    final undone = updated.where((s) => s['isCompleted'] == false).length;
+    final names = updated
+        .map((s) => s['name'])
+        .whereType<String>()
+        .where((n) => n.trim().isNotEmpty)
+        .toList();
+    final edited = updated.where((s) => s['content'] is String).length;
+    if (done > 0) {
+      buffer.writeln(
+        '• ${_l10n?.approvalCompleteSubNotes(done) ?? 'Mark $done Sub-Note(s) Done'}',
+      );
+    }
+    if (undone > 0) {
+      buffer.writeln(
+        '• ${_l10n?.approvalUncompleteSubNotes(undone) ?? 'Mark $undone Sub-Note(s) Not Done'}',
+      );
+    }
+    if (names.isNotEmpty) {
+      final text = names.join(', ');
+      buffer.writeln(
+        '• ${_l10n?.approvalRenameSubNotes(text) ?? 'Rename Sub-Notes To: $text'}',
+      );
+    }
+    if (edited > 0) {
+      buffer.writeln(
+        '• ${_l10n?.approvalEditSubNoteContent(edited) ?? 'Edit Content of $edited Sub-Note(s)'}',
+      );
+    }
   }
 
   /// Upper bound on rendered detail text.

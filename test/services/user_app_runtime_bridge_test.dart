@@ -288,6 +288,84 @@ void main() {
           expect(captured.single, contains('synapse:localechanged'));
         },
       );
+
+      test(
+        'emits the app theme and republishes it when dark mode toggles',
+        () async {
+          when(mockAppProvider.isDarkMode).thenReturn(false);
+          final source = bridge.buildBootstrapScript().source;
+          expect(source, contains('theme: "light"'));
+
+          bridge.registerJavaScriptHandlers(mockWebViewController);
+          bridge.pageDidStartLoading();
+          await bridge.pageDidFinishLoading();
+          // Nothing changed since boot: no republish.
+          verifyNever(
+            mockWebViewController.evaluateJavascript(
+              source: anyNamed('source'),
+            ),
+          );
+
+          when(mockAppProvider.isDarkMode).thenReturn(true);
+          await bridge.republishContextIfChanged();
+
+          final captured = verify(
+            mockWebViewController.evaluateJavascript(
+              source: captureAnyNamed('source'),
+            ),
+          ).captured.cast<String>();
+          expect(captured, hasLength(1));
+          expect(captured.single, contains('var nextTheme = "dark"'));
+          expect(captured.single, contains('window.Synapse.theme = nextTheme'));
+          expect(captured.single, contains('synapse:themechanged'));
+          // Only the theme changed, so no locale or Space event.
+          expect(captured.single, isNot(contains('synapse:localechanged')));
+          expect(captured.single, isNot(contains('synapse:spacechanged')));
+
+          // Publishing is idempotent until the value changes again.
+          await bridge.republishContextIfChanged();
+          verifyNever(
+            mockWebViewController.evaluateJavascript(
+              source: anyNamed('source'),
+            ),
+          );
+        },
+      );
+
+      test('reads the app setting, not the OS: dark boots as "dark"', () {
+        when(mockAppProvider.isDarkMode).thenReturn(true);
+        expect(bridge.buildBootstrapScript().source, contains('theme: "dark"'));
+      });
+    });
+
+    group('notifyResumed', () {
+      test('dispatches synapse:resumed once the page has loaded', () async {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+        bridge.buildBootstrapScript();
+        bridge.pageDidStartLoading();
+        await bridge.pageDidFinishLoading();
+
+        await bridge.notifyResumed();
+
+        final captured = verify(
+          mockWebViewController.evaluateJavascript(
+            source: captureAnyNamed('source'),
+          ),
+        ).captured.cast<String>();
+        expect(captured, hasLength(1));
+        expect(captured.single, contains("new CustomEvent('synapse:resumed')"));
+      });
+
+      test('is a no-op while loading and after detach', () async {
+        bridge.registerJavaScriptHandlers(mockWebViewController);
+        bridge.pageDidStartLoading();
+        await bridge.notifyResumed();
+        bridge.detach();
+        await bridge.notifyResumed();
+        verifyNever(
+          mockWebViewController.evaluateJavascript(source: anyNamed('source')),
+        );
+      });
     });
 
     group('runQuery', () {
@@ -1063,6 +1141,53 @@ void main() {
           verifyNever(mockAppProvider.updateNote(any));
         },
       );
+
+      test('updateNotes passes replace_text conflicts through verbatim, '
+          'prefixed with the note id', () async {
+        bridge.approveSession();
+        final existingNote = Note(
+          id: 'rt-id',
+          title: 'T',
+          content: 'C',
+          type: NoteType.note,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+        when(
+          mockDatabaseService.getNote(any),
+        ).thenAnswer((_) async => existingNote);
+        const conflict =
+            'replace_text: "old_text" matched 2 places in the note; no '
+            'changes were made.';
+        when(
+          mockModificationService.applyModifications('rt-id', any),
+        ).thenThrow(PluginFacingException(conflict));
+        when(
+          mockModificationService.applyModifications('other-id', any),
+        ).thenThrow(Exception('/data/user/0/secret path'));
+
+        final replace = {
+          'content': {
+            'action': 'replace_text',
+            'old_text': '- [ ] A',
+            'new_text': '- [x] A',
+          },
+        };
+        final result = await jsHandlers['updateNotes']!([
+          [
+            {'id': 'rt-id', 'modification': replace},
+            {'id': 'other-id', 'modification': replace},
+          ],
+        ]);
+
+        expect(result['success'], isTrue);
+        expect(result['updatedCount'], 0);
+        expect(result['errors'], [
+          'Updating note rt-id failed: $conflict',
+          // Other errors keep the redacted form.
+          'Updating note other-id failed. See the app log for details.',
+        ]);
+      });
     });
 
     test('log calls LoggerService', () async {

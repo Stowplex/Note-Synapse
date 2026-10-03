@@ -1639,7 +1639,7 @@
     acase('excerpts are truncated in SQL and paged past the row cap', function () {
       var seed = [];
       for (var i = 0; i < 250; i++) {
-        seed.push({ id: 'note-' + String(1000 + i), title: 'Note ' + i, content: new Array(3000).join('x') });
+        seed.push({ id: 'note-' + String(1000 + i), title: 'Note ' + i, content: new Array(host.EXCERPT + 500).join('x') });
       }
       var mock = host.installMock(seed);
       var ids = seed.map(function (n) { return n.id; });
@@ -1647,7 +1647,7 @@
         ok('every note came back', r.ok && r.rows.length === 250, 'rows=' + r.rows.length);
         eq('none is missing', r.missing.length, 0);
         ok('the excerpt is bounded', r.rows[0].excerpt.length === host.EXCERPT, 'len=' + r.rows[0].excerpt.length);
-        ok('the truncation happened in SQL', mock.queries.every(function (q) { return /substr\(content, 1, 400\)/.test(q); }), json(mock.queries[0]));
+        ok('the truncation happened in SQL', mock.queries.every(function (q) { return /substr\(content, 1, 8192\)/.test(q); }), json(mock.queries[0]));
         ok('and it paged with LIMIT/OFFSET', mock.queries.some(function (q) { return /OFFSET [1-9]/.test(q); }), json(mock.queries));
         ok('no single page asked for more than the cap',
           mock.queries.every(function (q) { return !/LIMIT (\d+)/.test(q) || parseInt(/LIMIT (\d+)/.exec(q)[1], 10) <= host.PAGE; }));
@@ -2381,16 +2381,18 @@
     eq('and what is left is the prose', ex(boardNote), 'Sprint planning');
     eq('a note that is nothing but code still gets a face',
       ex('```js\nconst only = 1;\n```'), 'const only = 1;');
-    // The excerpt arrives truncated at 400 characters by SQL, so it can stop
+    // The excerpt arrives bounded by SQL, so it can stop
     // inside a fence. That is ordinary, not an error.
     eq('an unterminated fence swallows the rest rather than throwing',
       ex('intro\n\n```js\nconst cut = '), 'intro');
 
     /* ---------------- shape ---------------- */
 
-    eq('at most three lines make a face', ex('a\nb\nc\nd\ne'), 'a · b · c');
-    ok('and it is capped', ex(new Array(60).join('word ') + '\nmore').length <= notes.CHARS, String(ex(new Array(60).join('word ')).length));
-    ok('with an ellipsis when it was cut', /…$/.test(ex(new Array(60).join('word '))), ex(new Array(60).join('word ')));
+    eq('source lines survive for layout to wrap at the current width', ex('a\nb\nc\nd\ne'), 'a · b · c · d · e');
+    var longPreview = new Array(100).join('word ') + 'last words';
+    eq('preview text survives beyond the old character and SQL limits', ex(longPreview), longPreview);
+    eq('callers can still request a source-line limit', ex('a\nb\nc\nd', { lines: 2 }), 'a · b');
+    ok('an explicit character limit still adds an ellipsis', /…$/.test(ex(longPreview, { chars: 40 })) && ex(longPreview, { chars: 40 }).length <= 40);
     eq('a first line that only repeats the title is dropped',
       ex('# Pricing\nThree tiers, annual only.', { title: 'Pricing' }), 'Three tiers, annual only.');
     eq('but a body that happens to start with other words is not',
@@ -2451,7 +2453,7 @@
         var tags = mock.queries.filter(function (q) { return /from\s+note_tags/i.test(q); });
         eq('one of them for the excerpts', excerpt.length, 1);
         eq('and one for the tags', tags.length, 1);
-        ok('the excerpt query is bounded in SQL', /substr\(content, 1, 400\)/.test(excerpt[0]), excerpt[0]);
+        ok('the excerpt query is bounded in SQL', /substr\(content, 1, 8192\)/.test(excerpt[0]), excerpt[0]);
         ok('and it never asks for the whole note', !/select\s+\*|,\s*content\b/i.test(excerpt[0]), excerpt[0]);
         ok('it reads the task columns off the same row', /\btype\b/.test(excerpt[0]) && /\bstatus\b/.test(excerpt[0]), excerpt[0]);
         ok('the tag query joins note_tags to tags', /note_tags[\s\S]*join[\s\S]*tags/i.test(tags[0]), tags[0]);

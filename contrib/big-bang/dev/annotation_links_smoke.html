@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Big Bang annotation attachment regression</title>
+<style>
+  body { font: 14px/1.5 monospace; }
+  .pass { color: #176536; } .fail { color: #b42318; }
+  iframe { position: fixed; width: 900px; height: 700px; right: 0; bottom: 0; opacity: .15; pointer-events: none; }
+  #readonly { right: 950px; }
+</style>
+<div id="sum">running…</div><div id="out"></div>
+<script>
+'use strict';
+var fixture = {
+  v: 1, view: { p: [40, 40], z: 1 },
+  items: {
+    s1: { k: 'sticky', t: 'First card', p: [0, 0] },
+    s2: { k: 'sticky', t: 'Second card', p: [380, 0] },
+    s3: { k: 'sticky', t: 'Third card', p: [380, 300] },
+    a1: { k: 'annot', t: 'Keep this annotation', p: [20, 120], at: [{ l: 'l1' }] }
+  },
+  links: [{ i: 'l1', a: 's1', b: 's2', t: 'Original' }, { i: 'l2', a: 's2', b: 's3', t: 'Destination' }]
+};
+var block = '```synapse-bigbang\n' + JSON.stringify(fixture) + '\n```\n';
+function url(content) { return '../plugins/big-bang.html?board=' + encodeURIComponent(content); }
+document.write('<iframe id="app" src="' + url('# Annotation attachment\n\n' + block) + '"></iframe>' +
+  '<iframe id="readonly" src="' + url(block + '\n' + block) + '"></iframe>');
+var results = [];
+function ok(name, pass, detail) { results.push({ name: name, pass: !!pass, detail: detail || '' }); }
+function eq(name, actual, expected) { ok(name, JSON.stringify(actual) === JSON.stringify(expected), JSON.stringify(actual) + ' / ' + JSON.stringify(expected)); }
+function sameSpot(name, actual, expected) {
+  // Board positions and annotation offsets are stored as whole board units;
+  // a link's curved midpoint may fall between them.
+  ok(name, actual.every(function (n, i) { return Math.abs(n - expected[i]) <= 0.51; }), JSON.stringify(actual) + ' / ' + JSON.stringify(expected));
+}
+function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+async function boot(id) {
+  for (var n = 0; n < 500; n++) {
+    var w = document.getElementById(id).contentWindow;
+    if (w.BB && w.BB.app && w.BB.app.S.booted && w.BB.app.S.store) { await wait(40); return w; }
+    await wait(25);
+  }
+  throw new Error('Board did not boot: ' + id);
+}
+function button(w, text) {
+  return Array.from(w.document.querySelectorAll('#bottombar button')).find(function (b) { return b.textContent === text; });
+}
+function click(w, text) {
+  var b = button(w, text);
+  if (!b) throw new Error('Missing button: ' + text + ' in ' + w.document.getElementById('bottombar').textContent);
+  b.click();
+}
+function pointer(w, type, target, x, y) {
+  target.dispatchEvent(new w.PointerEvent(type, { bubbles: true, cancelable: true,
+    pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y,
+    buttons: type === 'pointerup' ? 0 : 1 }));
+}
+async function tap(w, id) {
+  var s = w.BB.app.S, board = s.store.board, stage = w.document.getElementById('stage'), rect = stage.getBoundingClientRect();
+  var link = w.BB.model.link(board, id), target, x, y;
+  if (link) {
+    var mid = s.r.geomOf(board, id).mid;
+    target = w.document.querySelector('.bb-link[data-id="' + id + '"]');
+    x = rect.left + s.tx + mid[0] * s.k; y = rect.top + s.ty + mid[1] * s.k;
+  } else if (id) {
+    target = s.r.el(id);
+    var box = w.BB.app.itemScreenRect(id);
+    x = box.left + 20; y = box.top + 20;
+  } else { target = stage; x = rect.left + 6; y = rect.top + 6; }
+  pointer(w, 'pointerdown', target, x, y);
+  pointer(w, 'pointerup', stage, x, y);
+  await wait(40);
+}
+function annotationActions(w) { w.BB.app.ops.select('a1'); click(w, 'Actions'); }
+function at(w) { return w.BB.app.S.store.board.items.a1.at; }
+function spot(w) { var s = w.BB.app.S; return s.r.absOf(s.store.board, 'a1').map(function (n) { return Math.round(n * 100) / 100; }); }
+function content(w) { var b = w.BB.app.S.store.board; return JSON.stringify({ items: b.items, links: b.links, groups: b.groups }); }
+async function run() {
+  var w = await boot('app'), app = w.BB.app, s = app.S, originalSpot = spot(w);
+  app.ops.selectLink('l1'); click(w, 'Unlink');
+  eq('deleting the original link leaves the annotation free', at(w), []);
+  eq('deleting the link preserves the annotation position', spot(w), originalSpot);
+
+  annotationActions(w);
+  ok('free annotations offer Attach to in their actions', !!button(w, 'Attach to…'));
+  var before = content(w), undo = s.store.undo.length;
+  click(w, 'Attach to…');
+  eq('Attach keeps the existing annotation selected', Object.keys(s.sel), ['a1']);
+  ok('the chooser explains tapping a target', /Tap a link or card/.test(w.document.getElementById('bottombar').textContent));
+  click(w, 'Cancel');
+  eq('cancel does not alter the board', content(w), before);
+  eq('cancel leaves no undo step', s.store.undo.length, undo);
+  click(w, 'Attach to…'); await tap(w, null);
+  eq('tapping background cancels attaching', s.attaching, null);
+  eq('background cancellation keeps the annotation selected', Object.keys(s.sel), ['a1']);
+
+  click(w, 'Attach to…'); await tap(w, 'l2');
+  eq('tapping an existing link attaches the free annotation', at(w), [{ l: 'l2' }]);
+  sameSpot('attaching preserves its absolute position', spot(w), originalSpot);
+  eq('attaching exits the chooser', s.attaching, null);
+  eq('attaching records one undo step', s.store.undo.length, undo + 1);
+  ok('attachment is marked for saving', s.dirty);
+  app.ops.undo(); await wait(40);
+  eq('undo returns to the free annotation', at(w), []);
+  eq('undo preserves its position', spot(w), originalSpot);
+  app.ops.redo(); await wait(40);
+  eq('redo restores the link attachment', at(w), [{ l: 'l2' }]);
+  await app.ops.save();
+  var saved = w.BB.board.read(w.Synapse.__mock.notes['mock-note-1'].content);
+  eq('the attachment is persisted in the board note', saved.board.items.a1.at, [{ l: 'l2' }]);
+  await app.ops.open('mock-note-1');
+  eq('reopening restores the attachment', at(w), [{ l: 'l2' }]);
+  sameSpot('reopening preserves its position', spot(w), originalSpot);
+
+  annotationActions(w); click(w, 'Attach to…');
+  var offset = s.store.board.items.a1.p.slice();
+  await tap(w, 's1');
+  eq('an annotation can also attach to a card', at(w), [{ l: 'l2' }, { i: 's1' }]);
+  eq('adding another target retains the first anchor offset', s.store.board.items.a1.p, offset);
+  sameSpot('adding another target preserves the absolute position', spot(w), originalSpot);
+  ok('adding an anchor without changing position still marks a save', s.dirty);
+  await app.ops.save();
+  saved = w.BB.board.read(w.Synapse.__mock.notes['mock-note-1'].content);
+  eq('the additional anchor is saved', saved.board.items.a1.at, [{ l: 'l2' }, { i: 's1' }]);
+  click(w, 'Attach to…'); undo = s.store.undo.length; await tap(w, 's1');
+  eq('choosing an existing target never duplicates it', at(w).length, 2);
+  eq('a duplicate target adds no undo step', s.store.undo.length, undo);
+  ok('a duplicate target leaves the chooser available', s.attaching === 'a1');
+  click(w, 'Cancel'); click(w, 'Detach');
+  eq('Detach removes all anchors', at(w), []);
+  eq('Detach preserves the position', spot(w), originalSpot);
+  click(w, 'Attach to…'); await tap(w, 'l2');
+  eq('a manually detached annotation can reattach', at(w), [{ l: 'l2' }]);
+  click(w, 'Attach to…'); await tap(w, 'a1');
+  eq('an annotation cannot attach to itself', at(w), [{ l: 'l2' }]);
+  ok('an invalid target keeps the chooser open', s.attaching === 'a1');
+  click(w, 'Cancel');
+
+  var cycle = app.ops.link('a1', 's3');
+  annotationActions(w); click(w, 'Attach to…'); await tap(w, cycle.i);
+  eq('a link that depends on this annotation cannot create an anchor cycle', at(w), [{ l: 'l2' }]);
+  ok('the cycle refusal lets the user choose another target', s.attaching === 'a1');
+  click(w, 'Cancel');
+  click(w, 'Attach to…');
+  app.ops.remove(['a1']);
+  eq('removing the source annotation clears the chooser', s.attaching, null);
+
+  var ro = await boot('readonly'), ra = ro.BB.app, rs = ra.S;
+  ok('the second fixture is read-only with a real annotation', rs.readOnly && !!rs.store.board.items.a1);
+  annotationActions(ro);
+  ok('read-only annotations offer no Attach to action', !button(ro, 'Attach to…'));
+  before = content(ro); undo = rs.store.undo.length;
+  eq('the attach operation also rejects read-only boards', ra.ops.attachAnnotation('a1'), false);
+  eq('direct anchor changes reject read-only boards', ra.ops.setAnchors('a1', [{ l: 'l2' }]), false);
+  eq('read-only refusal does not alter the board', content(ro), before);
+  eq('read-only refusal adds no undo step', rs.store.undo.length, undo);
+  eq('read-only refusal never enters target selection', rs.attaching, null);
+}
+function report() {
+  results.forEach(function (r) {
+    var row = document.createElement('div'); row.className = r.pass ? 'row pass' : 'row fail';
+    row.textContent = (r.pass ? 'PASS ' : 'FAIL ') + r.name + (r.pass ? '' : ': ' + r.detail);
+    document.getElementById('out').appendChild(row);
+  });
+  var count = results.filter(function (r) { return r.pass; }).length;
+  document.getElementById('sum').textContent = count + '/' + results.length + ' assertions passed';
+}
+run().catch(function (e) { ok('uncaught test error', false, e.stack || String(e)); }).then(report);
+</script>
+</html>

@@ -134,7 +134,9 @@ would destroy whatever you typed in the real editor meanwhile.
 
 - **Note card** — title, excerpt, tag chips, and a task checkbox when the note
   is a task. Tap selects; tap again opens the action bar. Cards are
-  width-resizable by the grip on their right edge.
+  width-resizable by the grip on their right edge. Widening a card reveals more
+  note text: the preview wraps to the available width instead of using a fixed
+  character count. Reads remain bounded to the first 8,192 source characters.
 
   The checkbox is a control as well as a marker: tapping it asks, through the
   ordinary approval banner, and then writes the note's `status`. It is the only
@@ -146,7 +148,14 @@ would destroy whatever you typed in the real editor meanwhile.
   undo step.
 - **Annotation** — a light text box joined to what it points at by a thin
   dotted straight line, deliberately unlike a link's bowed curve. It can point
-  at a card, a link, or several at once. Left unattached it just floats.
+  at a card, a link, or several at once. Left unattached it just floats. Choose
+  **Actions → Attach to…**, then tap a link or card to add a target, including
+  after its original link was deleted. **Detach** removes all targets while
+  keeping the annotation in place.
+
+Stickies and annotations use **Return** for a new line. **Ctrl/Cmd+Return** or
+tapping away saves the text; **Escape** cancels the edit. Their **Colour**
+selector changes the paper tint and edge stripe, including in exported images.
 
 ### Links
 
@@ -493,6 +502,10 @@ node dev/build_check.js                      # the two installable YAMLs
 python3 -m http.server 8781 --directory .    # then open dev/harness.html
 node dev/chrome.js dev/app_smoke.html        # the app, in headless Chrome
 node dev/chrome.js dev/auto_smoke.html
+node dev/chrome.js dev/color_smoke.html
+node dev/chrome.js dev/annotation_links_smoke.html
+node dev/chrome.js dev/annotation_multiline_smoke.html
+node dev/chrome.js dev/note_resize_smoke.html
 ```
 
 `dev/chrome.js` exists because an ad-hoc `chrome --dump-dom` lies, in four ways
